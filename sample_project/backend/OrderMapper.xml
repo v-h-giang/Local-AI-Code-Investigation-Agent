@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.OrderMapper">
+  <select id="selectOrders" resultType="Order">
+    SELECT id, customer_id, status FROM order_header WHERE status = 'ACTIVE'
+  </select>
+</mapper>

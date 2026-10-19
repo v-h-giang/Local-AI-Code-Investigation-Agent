@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:VBox xmlns:mx="http://www.adobe.com/2006/mxml">
+    <mx:Script><![CDATA[
+        import mx.rpc.events.ResultEvent;
+        private function loadOrders():void {
+            orderService.getOrders();
+        }
+        private function onResult(event:ResultEvent):void {
+            ordersGrid.dataProvider = event.result;
+        }
+    ]]></mx:Script>
+    <mx:RemoteObject id="orderService" destination="orderService" result="onResult(event)"/>
+    <mx:Button id="refreshButton" label="Refresh" click="loadOrders()"/>
+    <mx:DataGrid id="ordersGrid"/>
+</mx:VBox>
