@@ -7,6 +7,7 @@
 - [3. Cài đặt Windows](#install)
 - [4. Sử dụng hằng ngày](#usage)
 - [5. Xuất tài liệu thiết kế](#design)
+- [5A. Khảo sát toàn bộ project tự động (không topic)](#automatic-overview)
 - [6. Cơ chế điều tra](#methods)
 - [7. Bảo mật và giới hạn](#security)
 - [8. Test và xử lý lỗi](#tests)
@@ -61,7 +62,7 @@ py -3 agent.py --project .\sample_project index
 py -3 agent.py --project .\sample_project ask "Truy vết chức năng loadOrders từ Adobe AIR đến SQL, chỉ kết luận nếu có bằng chứng."
 ```
 
-`ask`, `chat`, `design` cần dịch vụ Ollama; `doctor` kiểm tra kết nối nhưng vẫn chạy được khi Ollama tắt. `search`, `refs`, `read`, `index`, `report` **không cần Ollama**.
+`ask`, `chat`, `design`, `overview --ai` cần dịch vụ Ollama; `doctor` kiểm tra kết nối nhưng vẫn chạy được khi Ollama tắt. `search`, `refs`, `read`, `index`, `report`, `overview` (không `--ai`) **không cần Ollama**.
 
 <a id="usage"></a>
 ## 4. Sử dụng hằng ngày
@@ -116,6 +117,49 @@ Thêm `output/order/design.md` gồm mục lục clickable, phạm vi, luận gi
 **Sửa Draw.io:** mở <https://app.diagrams.net> → File → Open From → Device → chọn `.drawio` (hoặc extension VS Code diagrams.net).
 
 Nếu cần Word/PDF, dùng công cụ biên tập Markdown để chuyển đổi khi tài liệu đã được kiểm tra. Bản v1 xuất bản nguồn thiết kế dưới Markdown + Draw.io, không hứa xuất DOCX/PDF trực tiếp.
+
+
+<a id="automatic-overview"></a>
+## 5A. Khảo sát toàn bộ project tự động — không cần biết topic
+
+Đây là chế độ dành cho người chưa hiểu source. **Không cần đoán tên class, tên chức năng, từ khóa hoặc chọn file ban đầu.**
+
+### Lựa chọn A — Khảo sát toàn project, không cần Ollama
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" overview --out ".\output\overview"
+```
+
+Agent tự đọc các file source được cho phép và sinh:
+
+- `system_overview.md`: cấu trúc module, tỷ lệ file Java/AS3/MXML/SQL/XML, dấu hiệu entrypoint, danh sách tên method và mapper ID có thể điều tra, bảng SQL được nhắc đến; có mục lục liên kết.
+- `system_overview.drawio`: sơ đồ module **chỉnh sửa được**, node dựa trên top-level source folders; không đoán các lời gọi runtime.
+- `repository_files.csv`: liệt kê **toàn bộ file đã được quét**, không bị giới hạn 35 file như `report`.
+- `repository_overview.json`: dữ liệu khảo sát và evidence `path:line` để sử dụng lại.
+
+### Lựa chọn B — Khảo sát tự động và sinh bản thảo thiết kế bằng Ollama
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" design --out ".\output\overview"
+```
+
+**Không có `--topic`.** Agent trước tiên quét project, sau đó cho Ollama điều tra có chọn lọc những phần nổi bật dựa trên các evidence đã tìm, đồng thời sinh `architecture_design.md` và `investigation_log.json`. Có thể thay bằng `overview --ai --out ...`. Với dự án lớn, AI khảo sát tối đa 12 module đứng đầu theo số file trong lần tạo bản thảo này; inventory tĩnh vẫn chứa tất cả file được quét. Điều này **không** có nghĩa AI đọc kỹ mọi method.
+
+### Lựa chọn C — Trong phiên chat
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" chat
+```
+
+Nhập `/overview` để lập báo cáo quét tĩnh; nhập `/design-all` để lập bản thảo tổng quan bằng AI. Báo cáo mặc định được lưu ở `output/overview`. Các lệnh này **không dùng nội dung chat trước đó làm dữ liệu đầu vào**; bản thảo AI sử dụng source và khảo sát tự động.
+
+### Phạm vi và độ tin cậy
+
+- `overview` quét tối đa **25.000 file** có extension được hỗ trợ, file không quá 1 MB, không ở thư mục đã loại trừ, không symlink. Báo cáo ghi rõ nếu chạm giới hạn.
+- Nhóm module dựa theo **thư mục cấp 1**, không được coi là ranh giới module triển khai thực tế.
+- Tín hiệu UI handlers / method / mapper IDs chỉ là thông tin **khai báo trong source**, không tự khẳng định được luồng Java ↔ Adobe AIR ↔ database.
+- Sơ đồ tĩnh giới hạn 28 nhóm để dễ xem, ghi rõ số nhóm bị bỏ khỏi sơ đồ.
+- Mô hình AI vẫn có thể sai; phải kiểm tra `path:line` trước khi coi là thiết kế chính thức.
 
 <a id="methods"></a>
 ## 6. Cơ chế điều tra

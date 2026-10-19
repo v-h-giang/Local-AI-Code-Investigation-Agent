@@ -7,6 +7,7 @@ from pathlib import Path
 from codebase import Repo
 from agent_core import Investigator, Ollama, OllamaError
 from exporter import export_design, export_static
+from overview import export_overview
 
 
 def main(argv=None):
@@ -25,8 +26,10 @@ def main(argv=None):
     sub.add_parser('chat',help='Interactive session; /exit to quit')
     s = sub.add_parser('report',help='Generate offline static inventory and editable .drawio diagram')
     s.add_argument('--topic',default=''); s.add_argument('--out',default='output')
-    s = sub.add_parser('design',help='Investigate with AI and export design.md + drawio')
-    s.add_argument('--topic',required=True); s.add_argument('--out',default='output')
+    s = sub.add_parser('overview',help='Automatically survey the full repository without a topic (optional AI)')
+    s.add_argument('--out',default='output/overview'); s.add_argument('--ai',action='store_true',help='Also write AI architecture design using local Ollama')
+    s = sub.add_parser('design',help='With --topic: feature design; without --topic: automated repo overview + AI')
+    s.add_argument('--topic',default=''); s.add_argument('--out',default=None)
     a = p.parse_args(argv)
     try:
         repo = Repo(a.project)
@@ -35,22 +38,30 @@ def main(argv=None):
         if a.command=='refs': print(repo.find_symbol(a.symbol));return 0
         if a.command=='read': print(repo.read_file(a.path,a.start,a.end));return 0
         if a.command=='report': print(json.dumps(export_static(repo,a.topic,a.out),ensure_ascii=False,indent=2));return 0
+        if a.command=='overview' and not a.ai:
+            print(json.dumps(export_overview(repo,a.out),ensure_ascii=False,indent=2));return 0
         llm = Ollama(a.host, a.model)
         if a.command=='doctor':
             print(f'Project: {repo.root}\nSample files:\n{repo.list_files(limit=15)}\n{llm.health()}')
             return 0
+        if a.command=='overview':
+            print(json.dumps(export_overview(repo,a.out,llm=llm),ensure_ascii=False,indent=2));return 0
         if a.command=='design':
-            print(json.dumps(export_design(repo,llm,a.topic,a.out),ensure_ascii=False,indent=2))
-            return 0
+            dest=a.out or ('output' if a.topic.strip() else 'output/overview')
+            result = export_design(repo,llm,a.topic,dest) if a.topic.strip() else export_overview(repo,dest,llm=llm)
+            print(json.dumps(result,ensure_ascii=False,indent=2));return 0
         inv = Investigator(repo,llm)
         if a.command=='ask': print('\n'+inv.ask(a.question));return 0
         if a.command=='chat':
-            print('Local AI Code Agent - nhập /exit để thoát; /clear để xóa lịch sử.')
+            print('Local AI Code Agent - /overview (quét offline), /design-all (AI overview), /exit, /clear.')
             while True:
                 try: question=input('\nBạn> ').strip()
                 except (EOFError,KeyboardInterrupt):break
                 if question.lower() in ('/exit','exit','quit'):break
                 if question.lower()=='/clear': inv=Investigator(repo,llm);print('Đã xóa lịch sử.');continue
+                if question.lower() in ('/overview','/design-all'):
+                    info=export_overview(repo,'output/overview',llm=llm if question.lower()=='/design-all' else None)
+                    print(json.dumps(info,ensure_ascii=False,indent=2));continue
                 if question: print('\nAgent> '+inv.ask(question))
             return 0
     except (OllamaError,ValueError,OSError,KeyboardInterrupt) as e:

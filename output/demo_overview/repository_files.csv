@@ -1,0 +1,6 @@
+﻿path,module,technology,size_bytes
+backend/OrderMapper.xml,backend,XML,231
+backend/OrderService.java,backend,Java,184
+db/schema.sql,db,SQL,116
+frontend/OrderActions.as,frontend,ActionScript,167
+frontend/OrderScreen.mxml,frontend,MXML,605

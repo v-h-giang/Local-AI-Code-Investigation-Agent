@@ -1,0 +1,163 @@
+{
+  "project": "sample_project",
+  "root": "/mnt/data/local_code_agent/sample_project",
+  "generated_at": "2026-10-19T03:19:52",
+  "scanned_files": 5,
+  "at_file_limit": false,
+  "coverage_note": "Files with permitted extensions, each <=1 MB; repository scanning stops at 25000 files. Skips excluded folders and symlinks.",
+  "languages": {
+    "XML": 1,
+    "Java": 1,
+    "SQL": 1,
+    "ActionScript": 1,
+    "MXML": 1
+  },
+  "modules": [
+    {
+      "name": "backend",
+      "files": 2,
+      "technologies": {
+        "XML": 1,
+        "Java": 1
+      },
+      "examples": [
+        "backend/OrderMapper.xml",
+        "backend/OrderService.java"
+      ],
+      "signals": [
+        {
+          "type": "SQL mapper statement",
+          "source": "backend/OrderMapper.xml:3",
+          "excerpt": "<select id=\"selectOrders\" resultType=\"Order\">"
+        }
+      ],
+      "top_tables": [
+        [
+          "order_header",
+          1
+        ]
+      ]
+    },
+    {
+      "name": "frontend",
+      "files": 2,
+      "technologies": {
+        "ActionScript": 1,
+        "MXML": 1
+      },
+      "examples": [
+        "frontend/OrderActions.as",
+        "frontend/OrderScreen.mxml"
+      ],
+      "signals": [
+        {
+          "type": "AIR UI event binding",
+          "source": "frontend/OrderScreen.mxml:13",
+          "excerpt": "<mx:Button id=\"refreshButton\" label=\"Refresh\" click=\"loadOrders()\"/>"
+        }
+      ],
+      "top_tables": []
+    },
+    {
+      "name": "db",
+      "files": 1,
+      "technologies": {
+        "SQL": 1
+      },
+      "examples": [
+        "db/schema.sql"
+      ],
+      "signals": [
+        {
+          "type": "SQL DML or schema",
+          "source": "db/schema.sql:1",
+          "excerpt": "CREATE TABLE order_header ("
+        }
+      ],
+      "top_tables": [
+        [
+          "order_header",
+          1
+        ]
+      ]
+    }
+  ],
+  "signals": [
+    {
+      "type": "SQL mapper statement",
+      "source": "backend/OrderMapper.xml:3",
+      "excerpt": "<select id=\"selectOrders\" resultType=\"Order\">"
+    },
+    {
+      "type": "SQL DML or schema",
+      "source": "db/schema.sql:1",
+      "excerpt": "CREATE TABLE order_header ("
+    },
+    {
+      "type": "AIR UI event binding",
+      "source": "frontend/OrderScreen.mxml:13",
+      "excerpt": "<mx:Button id=\"refreshButton\" label=\"Refresh\" click=\"loadOrders()\"/>"
+    }
+  ],
+  "discovered_topics": [
+    {
+      "kind": "SQL mapper id",
+      "name": "selectOrders",
+      "source": "backend/OrderMapper.xml:3"
+    },
+    {
+      "kind": "Java method",
+      "name": "getOrders",
+      "source": "backend/OrderService.java:4"
+    },
+    {
+      "kind": "AS3 function",
+      "name": "getOrders",
+      "source": "frontend/OrderActions.as:3"
+    },
+    {
+      "kind": "AIR handler",
+      "name": "loadOrders",
+      "source": "frontend/OrderScreen.mxml:13"
+    }
+  ],
+  "tables": [
+    [
+      "order_header",
+      2
+    ]
+  ],
+  "errors": [],
+  "files": [
+    {
+      "path": "backend/OrderMapper.xml",
+      "module": "backend",
+      "technology": "XML",
+      "size_bytes": 231
+    },
+    {
+      "path": "backend/OrderService.java",
+      "module": "backend",
+      "technology": "Java",
+      "size_bytes": 184
+    },
+    {
+      "path": "db/schema.sql",
+      "module": "db",
+      "technology": "SQL",
+      "size_bytes": 116
+    },
+    {
+      "path": "frontend/OrderActions.as",
+      "module": "frontend",
+      "technology": "ActionScript",
+      "size_bytes": 167
+    },
+    {
+      "path": "frontend/OrderScreen.mxml",
+      "module": "frontend",
+      "technology": "MXML",
+      "size_bytes": 605
+    }
+  ]
+}

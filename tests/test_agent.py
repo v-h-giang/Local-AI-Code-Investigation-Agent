@@ -70,3 +70,44 @@ class Tests(unittest.TestCase):
         self.assertEqual(data['tool_calls'],1)
 
 if __name__ == '__main__': unittest.main()
+
+class OverviewTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = Repo(SAMPLE, Path(self.tmp.name)/'index.sqlite')
+
+    def test_full_topic_free_static_overview(self):
+        import json
+        import csv
+        import xml.etree.ElementTree as ET
+        from overview import export_overview
+        destination=Path(self.tmp.name)/'overview'
+        meta=export_overview(self.repo,destination)
+        self.assertEqual(meta['files_scanned'],5)
+        self.assertEqual(meta['modules'],3)
+        self.assertEqual(meta['discovered_topics'],4)
+        data=json.loads((destination/'repository_overview.json').read_text('utf-8'))
+        self.assertEqual({m['name'] for m in data['modules']},{'frontend','backend','db'})
+        self.assertTrue(any(x['name']=='loadOrders' for x in data['discovered_topics']))
+        self.assertEqual(len(data['files']),5)
+        self.assertTrue(any(x['source']=='frontend/OrderScreen.mxml:13' for x in data['signals']))
+        self.assertEqual(ET.parse(destination/'system_overview.drawio').getroot().tag,'mxfile')
+        self.assertIn('## Mục lục',(destination/'system_overview.md').read_text('utf-8'))
+        with (destination/'repository_files.csv').open('r',encoding='utf-8-sig') as file:
+            self.assertEqual(len(list(csv.DictReader(file))),5)
+
+    def test_topic_free_design_with_mock_ollama(self):
+        from overview import export_overview
+        destination=Path(self.tmp.name)/'overview'
+        meta=export_overview(self.repo,destination,llm=FakeLLM(),verbose=False)
+        self.assertTrue(Path(meta['ai_design']).is_file())
+        self.assertIn('OrderMapper.xml:4',Path(meta['ai_design']).read_text('utf-8'))
+        self.assertEqual(meta['tool_calls'],1)
+
+    def test_cli_no_topic_static(self):
+        import subprocess
+        result=subprocess.run([sys.executable, str(SAMPLE.parent/'agent.py'), '--project', str(SAMPLE),
+                               'overview', '--out', str(Path(self.tmp.name)/'generated')],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('files_scanned',result.stdout)
