@@ -8,6 +8,7 @@ from codebase import Repo
 from agent_core import Investigator, Ollama, OllamaError
 from exporter import export_design, export_static
 from overview import export_overview
+from system_memory import print_ram_status
 
 
 def main(argv=None):
@@ -36,6 +37,7 @@ def main(argv=None):
     s.add_argument('--topic',default=''); s.add_argument('--out',default=None)
     s.add_argument('--max-batches',type=int,default=24); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=2); s.add_argument('--no-resume',action='store_true')
     a = p.parse_args(argv)
+    print_ram_status()
     try:
         repo = Repo(a.project)
         if a.command=='index': print(json.dumps(repo.index(),ensure_ascii=False,indent=2));return 0

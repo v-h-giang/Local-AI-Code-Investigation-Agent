@@ -301,3 +301,8 @@ Các lô đã hoàn thành không cần chạy lại trừ khi model, context, n
 Trong chat, `/overview` chỉ quét tĩnh; `/design-all` thực hiện quy trình AI theo lô mặc định.
 
 **Giới hạn:** phương pháp này tạo bản khảo sát có dẫn chứng và các phân tích cục bộ, **chưa tự xác minh call graph runtime, chưa gộp tất cả chức năng thành một thiết kế chi tiết**, và không bảo đảm đoạn trích đại diện cho toàn bộ nội dung file. `analysis_manifest.json` thể hiện chính xác mức bao phủ. Với repository lớn, nên dùng `--max-batches` cao hơn và kiểm duyệt kết quả theo từng module. Output có thể chứa trích đoạn code nội bộ, vì vậy không công bố công khai.
+
+
+## Hiển thị RAM trong terminal
+
+Agent tự in `TotalRAM_GB`, `UsedRAM_GB`, `FreeRAM_GB` khi khởi động mọi lệnh (`chat`, `design`, `doctor`, ...). Không cần chạy PowerShell riêng hoặc cài thêm package. Trên Windows số liệu lấy từ `GlobalMemoryStatusEx`, gần với số liệu bộ nhớ vật lý của hệ điều hành và chỉ là ảnh chụp tại lúc bắt đầu; không phải bộ nhớ riêng của Ollama.
