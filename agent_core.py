@@ -1,6 +1,8 @@
 """Ollama tool-using agent. Local, read-only, no external Python packages."""
 from __future__ import annotations
 import json
+import socket
+from http.client import RemoteDisconnected, IncompleteRead
 from urllib import request, error, parse
 from codebase import Repo
 
@@ -25,17 +27,20 @@ class OllamaError(RuntimeError):
     pass
 
 class Ollama:
-    def __init__(self, host: str = 'http://127.0.0.1:11434', model: str = 'qwen3:8b', timeout: int = 240):
+    def __init__(self, host: str = 'http://127.0.0.1:11434', model: str = 'qwen3:4b', timeout: int = 240, num_ctx: int = 4096):
         url = parse.urlparse(host)
         if url.scheme != 'http' or url.hostname not in ('localhost', '127.0.0.1', '::1') or url.username or url.password or url.path not in ('', '/'):
             raise ValueError('For local-only operation, Ollama host must be loopback HTTP, e.g. http://127.0.0.1:11434')
         self.host = host.rstrip('/')
         self.model = model
         self.timeout = timeout
+        if num_ctx < 512:
+            raise ValueError("--num-ctx must be >= 512")
+        self.num_ctx = num_ctx
 
-    def call(self, messages: list[dict], tools: bool = True, num_ctx: int = 8192, num_predict: int = 1200) -> dict:
+    def call(self, messages: list[dict], tools: bool = True, num_ctx: int | None = None, num_predict: int = 1200) -> dict:
         payload = {'model':self.model, 'messages':messages, 'stream':False,
-                   'options':{'temperature':0.1, 'num_ctx':num_ctx, 'num_predict':num_predict}, 'think':False}
+                   'options':{'temperature':0.1, 'num_ctx':num_ctx if num_ctx is not None else self.num_ctx, 'num_predict':num_predict}, 'think':False}
         if tools:
             payload['tools'] = TOOL_SCHEMAS
         req = request.Request(self.host + '/api/chat', data=json.dumps(payload, ensure_ascii=False).encode(), headers={'Content-Type':'application/json'}, method='POST')
@@ -44,11 +49,23 @@ class Ollama:
                 obj = json.load(res)
         except error.HTTPError as e:
             raise OllamaError(f'Ollama returned HTTP {e.code}: {e.read(700).decode(errors="replace")}') from e
-        except (error.URLError, TimeoutError) as e:
-            raise OllamaError('Cannot connect to local Ollama. Start Ollama and pull the configured model.') from e
+        except (error.URLError, TimeoutError, ConnectionError, socket.timeout, RemoteDisconnected, IncompleteRead, OSError) as e:
+            detail = str(e.reason if isinstance(e, error.URLError) else e)
+            if isinstance(e, (TimeoutError, socket.timeout)) or 'timed out' in detail.lower():
+                hint = 'Timed out waiting for model generation (not necessarily a server connection failure).'
+            elif any(term in detail.lower() for term in ('reset', 'disconnected', 'closed', 'broken pipe', 'without response')):
+                hint = 'Connection closed during the request; Ollama may have restarted/crashed or stopped loading the model (check logs and available RAM).'
+            else:
+                hint = 'Check Ollama server, hostname/port and local firewall.'
+            raise OllamaError(f'Ollama /api/chat failed for model {self.model} at {self.host}: {type(e).__name__}: {detail}. {hint}') from e
         if 'message' not in obj:
             raise OllamaError(f'Ollama returned unexpected response: {str(obj)[:400]}')
         return obj['message']
+
+    def probe(self) -> str:
+        # Short generation checks model load, not just HTTP reachability.
+        message = self.call([{'role':'user','content':'Reply OK.'}], tools=False, num_ctx=1024, num_predict=20)
+        return f'Model generation OK: {str(message.get("content", ""))[:100]}'
 
     def health(self) -> str:
         req = request.Request(self.host + '/api/tags')

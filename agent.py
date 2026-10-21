@@ -13,10 +13,13 @@ from overview import export_overview
 def main(argv=None):
     p = argparse.ArgumentParser(description='Read-only local AI investigation of Java / SQL / Adobe AIR source')
     p.add_argument('--project', required=True, help='Local source project directory')
-    p.add_argument('--model', default='qwen3:8b', help='Ollama local model tag (default qwen3:8b)')
+    p.add_argument('--model', default='qwen3:4b', help='Ollama local model tag (default qwen3:4b for low-RAM PCs)')
     p.add_argument('--host', default='http://127.0.0.1:11434', help='Loopback Ollama endpoint')
+    p.add_argument('--num-ctx', type=int, default=4096, help='Ollama context tokens (default 4096; try 2048 with limited RAM)')
+    p.add_argument('--timeout', type=int, default=240, help='HTTP response timeout in seconds (default 240)')
     sub = p.add_subparsers(dest='command', required=True)
-    sub.add_parser('doctor', help='Verify Ollama and report source summary')
+    d = sub.add_parser('doctor', help='Verify Ollama and report source summary')
+    d.add_argument('--probe', action='store_true', help='Actually load model and generate a tiny reply')
     sub.add_parser('index', help='Rebuild local SQLite FTS search index')
     s = sub.add_parser('search', help='Literal source search without AI')
     s.add_argument('query'); s.add_argument('--pattern', default='*'); s.add_argument('--limit', type=int,default=30)
@@ -40,9 +43,11 @@ def main(argv=None):
         if a.command=='report': print(json.dumps(export_static(repo,a.topic,a.out),ensure_ascii=False,indent=2));return 0
         if a.command=='overview' and not a.ai:
             print(json.dumps(export_overview(repo,a.out),ensure_ascii=False,indent=2));return 0
-        llm = Ollama(a.host, a.model)
+        llm = Ollama(a.host, a.model, timeout=a.timeout, num_ctx=a.num_ctx)
         if a.command=='doctor':
             print(f'Project: {repo.root}\nSample files:\n{repo.list_files(limit=15)}\n{llm.health()}')
+            if a.probe:
+                print(llm.probe())
             return 0
         if a.command=='overview':
             print(json.dumps(export_overview(repo,a.out,llm=llm),ensure_ascii=False,indent=2));return 0

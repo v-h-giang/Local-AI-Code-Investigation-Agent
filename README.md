@@ -24,7 +24,7 @@ Agent chạy trên **Ollama localhost**, hoạt động trong terminal VS Code, 
 - Tài liệu thiết kế: `design.md` chứa dẫn chứng `path:line`; `source_references.drawio` là **sơ đồ editable** trong diagrams.net; `source_inventory.md` là thống kê chạy được ngay cả khi Ollama chưa cài.
 - Read-only: chỉ được đọc source; agent không có tool ghi/chạy shell/chạy SQL.
 
-**Quan trọng:** Ở bản v1 này, quan hệ trong Draw.io là **tham chiếu ký tự tĩnh**, không phải call graph hay runtime data flow đã được chứng minh. Agent có thể suy luận luồng nghiệp vụ bằng cách đọc nguồn, nhưng phải phân biệt bằng chứng và giả thuyết.
+**Quan trọng:** Ở bản v2.1 này, quan hệ trong Draw.io là **tham chiếu ký tự tĩnh**, không phải call graph hay runtime data flow đã được chứng minh. Agent có thể suy luận luồng nghiệp vụ bằng cách đọc nguồn, nhưng phải phân biệt bằng chứng và giả thuyết.
 
 <a id="requirements"></a>
 ## 2. Yêu cầu hệ thống
@@ -32,8 +32,8 @@ Agent chạy trên **Ollama localhost**, hoạt động trong terminal VS Code, 
 - Windows 10/11, VS Code (tùy chọn, tiện dùng).
 - Ollama cho Windows: <https://ollama.com/download/windows>
 - Python 3.11+ (chỉ dùng standard library, không yêu cầu `pip install`).
-- Nếu máy khoảng 15–16 GB RAM: model mặc định `qwen3:8b` Q4_K_M (~5.2 GB tải xuống), cân nhắc `qwen2.5-coder:7b` (~4.7 GB) nếu ưu tiên chuyên code. Dung lượng model **không phải tổng RAM lúc chạy**, còn KV cache và context.
-- Bắt đầu với `num_ctx=8192` do máy RAM hạn chế, chỉnh trong `agent_core.py` nếu đủ tài nguyên.
+- Nếu máy khoảng 15–16 GB RAM: model mặc định `qwen3:4b` Q4_K_M (~5.2 GB tải xuống), cân nhắc `qwen2.5-coder:7b` (~4.7 GB) nếu ưu tiên chuyên code. Dung lượng model **không phải tổng RAM lúc chạy**, còn KV cache và context.
+- Bắt đầu với `num_ctx=4096` do máy RAM hạn chế, chỉnh trong `agent_core.py` nếu đủ tài nguyên.
 
 <a id="install"></a>
 ## 3. Cài đặt Windows
@@ -41,7 +41,7 @@ Agent chạy trên **Ollama localhost**, hoạt động trong terminal VS Code, 
 **Bước 1.** Cài Ollama cho Windows. Mở PowerShell và pull model:
 
 ```powershell
-ollama pull qwen3:8b
+ollama pull qwen3:4b
 ollama list
 ```
 
@@ -116,7 +116,7 @@ Thêm `output/order/design.md` gồm mục lục clickable, phạm vi, luận gi
 
 **Sửa Draw.io:** mở <https://app.diagrams.net> → File → Open From → Device → chọn `.drawio` (hoặc extension VS Code diagrams.net).
 
-Nếu cần Word/PDF, dùng công cụ biên tập Markdown để chuyển đổi khi tài liệu đã được kiểm tra. Bản v1 xuất bản nguồn thiết kế dưới Markdown + Draw.io, không hứa xuất DOCX/PDF trực tiếp.
+Nếu cần Word/PDF, dùng công cụ biên tập Markdown để chuyển đổi khi tài liệu đã được kiểm tra. Bản v2.1 xuất bản nguồn thiết kế dưới Markdown + Draw.io, không hứa xuất DOCX/PDF trực tiếp.
 
 
 <a id="automatic-overview"></a>
@@ -202,8 +202,8 @@ py -3 -m unittest discover -s tests -v
 ```
 
 - `Ollama not reachable`: mở Ollama, kiểm tra `http://127.0.0.1:11434/api/tags`, tránh chạy 2 server cùng cổng.
-- `model not found`: `ollama pull qwen3:8b`.
-- Chậm hoặc hết RAM: dùng `--model qwen3:4b` sau khi `ollama pull qwen3:4b`; giảm `num_ctx` ở `agent_core.py` từ 8192 xuống 4096.
+- `model not found`: `ollama pull qwen3:4b`.
+- Chậm hoặc hết RAM: dùng `--model qwen3:4b` sau khi `ollama pull qwen3:4b`; thử `--num-ctx 2048` ngay trên lệnh chạy agent.
 - Kết quả chưa có dẫn chứng: yêu cầu AI dùng `search_code`, `read_file`, kiểm tra các file:line của câu trả lời.
 - Sai encoding source Nhật: reader thử `UTF-8-SIG`, `CP932`, `UTF-16`, rồi thay thế ký tự khi cần; hãy kiểm tra file đầu vào.
 
@@ -214,3 +214,38 @@ py -3 -m unittest discover -s tests -v
 - Model Qwen3 8B: <https://ollama.com/library/qwen3:8b>
 - Model Qwen2.5 Coder: <https://ollama.com/library/qwen2.5-coder:7b>
 - Draw.io: <https://www.diagrams.net/>
+
+<a id="diagnose-v21"></a>
+## 9. Ollama diagnostics (v2.1) — 5 GB free RAM
+
+The older v2 error `Cannot connect to local Ollama` could mask request timeouts and connection resets. v2.1 preserves the underlying error and defaults to a smaller 4096-token context (previously 8192).
+
+**PowerShell from the directory containing `agent.py`:**
+
+```powershell
+ollama list
+Invoke-RestMethod http://127.0.0.1:11434/api/tags
+ollama run qwen3:4b "Reply OK"
+py -3 agent.py --project ".\sample_project" --model qwen3:4b --num-ctx 2048 doctor --probe
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:4b --num-ctx 2048 design
+```
+
+In `doctor --probe`, the application **actually requests text generation** with context 1024 to distinguish an available HTTP server from a model that can be loaded. It does not check available RAM or guarantee that longer design requests will work.
+
+How to interpret output:
+
+- `Ollama not reachable`: endpoint/port/server issue. Check `ollama serve` if not already running.
+- `HTTP 404` or a model-not-found message: check `ollama list`, `ollama pull qwen3:4b`, then use `--model qwen3:4b`.
+- `HTTP 500`, `out of memory`, `model requires more memory`: model loading/memory failure; close memory-heavy applications, reduce model/context.
+- `Timed out waiting for model generation`: model/server did not respond before `--timeout` seconds. Try `--timeout 600` only if the model can demonstrably load and remains responsive.
+- `Connection closed during request`: Ollama process may have crashed or restarted; inspect the Ollama application log, Windows Event Viewer and memory availability. This is not by itself proof of OOM.
+
+If Ollama is unavailable, **automatic static investigation still works**:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" overview --out ".\output\overview"
+```
+
+The offline mode generates `system_overview.md`, `.drawio`, `.csv`, and `.json`, but not the AI-written `architecture_design.md`.
+
+**New global parameters:** `--num-ctx 2048` (lower context) and `--timeout 600` (longer response timeout). Global parameters must appear **before** the subcommand (`design`, `doctor`, `chat`).

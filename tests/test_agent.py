@@ -111,3 +111,39 @@ class OverviewTests(unittest.TestCase):
                                'overview', '--out', str(Path(self.tmp.name)/'generated')],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('files_scanned',result.stdout)
+
+class OllamaDiagnosticsTests(unittest.TestCase):
+    def test_timeout_shows_real_failure(self):
+        from unittest.mock import patch
+        from agent_core import Ollama, OllamaError
+        with patch('agent_core.request.urlopen', side_effect=TimeoutError('timed out')):
+            with self.assertRaisesRegex(OllamaError, 'Timed out'):
+                Ollama(model='qwen3:4b').probe()
+
+    def test_refused_connection_shows_reason(self):
+        from unittest.mock import patch
+        from urllib.error import URLError
+        from agent_core import Ollama, OllamaError
+        with patch('agent_core.request.urlopen', side_effect=URLError(ConnectionRefusedError('Connection refused'))):
+            with self.assertRaisesRegex(OllamaError, 'Connection refused'):
+                Ollama(model='qwen3:4b').probe()
+
+    def test_default_context_is_4096_and_probe_1024(self):
+        import json
+        from unittest.mock import patch
+        from agent_core import Ollama
+        observed = []
+        class Dummy:
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self, *args):
+                return json.dumps({'message':{'role':'assistant','content':'OK'}}).encode('utf-8')
+        def fake_urlopen(req,timeout):
+            observed.append(json.loads(req.data.decode('utf-8')))
+            return Dummy()
+        with patch('agent_core.request.urlopen', side_effect=fake_urlopen):
+            llm = Ollama(model='qwen3:4b')
+            llm.call([{'role':'user','content':'Hi'}], tools=False)
+            self.assertIn('OK',llm.probe())
+        self.assertEqual(observed[0]['options']['num_ctx'],4096)
+        self.assertEqual(observed[1]['options']['num_ctx'],1024)
