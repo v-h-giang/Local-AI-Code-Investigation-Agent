@@ -22,6 +22,8 @@ def main(argv=None):
     d = sub.add_parser('doctor', help='Verify Ollama and report source summary')
     d.add_argument('--probe', action='store_true', help='Actually load model and generate a tiny reply')
     sub.add_parser('index', help='Rebuild local SQLite FTS search index')
+    s = sub.add_parser('architecture', help='Fast static architecture, libraries and file links (NO Ollama)')
+    s.add_argument('--out', default='output/architecture', help='Output folder')
     s = sub.add_parser('search', help='Literal source search without AI')
     s.add_argument('query'); s.add_argument('--pattern', default='*'); s.add_argument('--limit', type=int,default=30)
     s = sub.add_parser('refs', help='Find symbol references without AI'); s.add_argument('symbol')
@@ -41,6 +43,9 @@ def main(argv=None):
     try:
         repo = Repo(a.project)
         if a.command=='index': print(json.dumps(repo.index(),ensure_ascii=False,indent=2));return 0
+        if a.command=='architecture':
+            from architecture import export_architecture
+            print(json.dumps(export_architecture(repo,a.out),ensure_ascii=False,indent=2));return 0
         if a.command=='search': print(repo.search_code(a.query, a.pattern, a.limit));return 0
         if a.command=='refs': print(repo.find_symbol(a.symbol));return 0
         if a.command=='read': print(repo.read_file(a.path,a.start,a.end));return 0

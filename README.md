@@ -4,6 +4,10 @@
 
 See [v4 usage and recovery instructions](README_V4.md).
 
+**v4.1:** Fast architecture discovery without running Ollama or indexing: [Architecture-first guide](README_ARCHITECTURE.md).
+
+Run: `py -3 agent.py --project "D:\\Work\\LegacyProject" architecture --out "D:\\AgentOutput\\architecture"`.
+
 ---
 
 # Quick start: automatic indexing
