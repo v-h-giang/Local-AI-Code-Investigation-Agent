@@ -20,7 +20,7 @@ TOOL_SCHEMAS = [
     {'type':'function','function':{'name':'read_file','description':'Read numbered source lines, at most 200 lines per call','parameters':{'type':'object','properties':{'path':{'type':'string'},'start_line':{'type':'integer'},'end_line':{'type':'integer'}},'required':['path']}}},
     {'type':'function','function':{'name':'outline_file','description':'List declarations, SQL and MXML landmarks with source lines','parameters':{'type':'object','properties':{'path':{'type':'string'}},'required':['path']}}},
     {'type':'function','function':{'name':'sql_usage','description':'Locate references to an SQL table in mapper/Java/SQL/AS source','parameters':{'type':'object','properties':{'table':{'type':'string'}},'required':['table']}}},
-    {'type':'function','function':{'name':'search_index','description':'Lexical FTS5 index search for keywords; requires indexing first; not vector search','parameters':{'type':'object','properties':{'query':{'type':'string'},'limit':{'type':'integer'}},'required':['query']}}}
+    {'type':'function','function':{'name':'search_index','description':'Lexical FTS5 index search for keywords; index is prepared automatically by CLI; not vector search','parameters':{'type':'object','properties':{'query':{'type':'string'},'limit':{'type':'integer'}},'required':['query']}}}
 ]
 
 class OllamaError(RuntimeError):

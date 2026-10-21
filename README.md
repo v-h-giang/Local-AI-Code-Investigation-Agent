@@ -1,3 +1,21 @@
+# Quick start: automatic indexing
+
+You do **not** need to run `index` before `design` or `chat`. The agent checks source files and creates or refreshes the SQLite FTS5 index automatically on the first run and when source file size/mtime changes. Unchanged projects reuse the index. The `index` command remains available for manual forced rebuild. Indexing is a search cache and creates **no design document**.
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 design --out "D:\AgentOutput\overview"
+```
+
+For chat:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 chat
+```
+
+The automatic index lives outside the project in `%USERPROFILE%\.local_code_agent\index\`. Design files are written to the `--out` folder. Indexing is metadata based and is not a full content hash; if source files are changed without their size or timestamps changing, run `index` to force refresh.
+
+---
+
 # Local Code Investigation Agent — Ollama (Windows / VS Code)
 
 ## Mục lục

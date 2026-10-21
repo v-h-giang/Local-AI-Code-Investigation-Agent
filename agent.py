@@ -45,6 +45,10 @@ def main(argv=None):
         if a.command=='report': print(json.dumps(export_static(repo,a.topic,a.out),ensure_ascii=False,indent=2));return 0
         if a.command=='overview' and not a.ai:
             print(json.dumps(export_overview(repo,a.out),ensure_ascii=False,indent=2));return 0
+        if a.command in ('ask', 'chat', 'design', 'overview'):
+            print('[Index] Checking local source index...', flush=True)
+            info = repo.ensure_index()
+            print(f'[Index] {info["status"]}: {info["files"]} files; DB: {info["database"]}', flush=True)
         llm = Ollama(a.host, a.model, timeout=a.timeout, num_ctx=a.num_ctx)
         if a.command=='doctor':
             print(f'Project: {repo.root}\nSample files:\n{repo.list_files(limit=15)}\n{llm.health()}')
@@ -52,8 +56,10 @@ def main(argv=None):
                 print(llm.probe())
             return 0
         if a.command=='overview':
+            print('[Overview] Surveying repository and generating outputs...', flush=True)
             print(json.dumps(export_overview(repo,a.out,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume),ensure_ascii=False,indent=2));return 0
         if a.command=='design':
+            print('[Design] Analyzing source and writing documents...', flush=True)
             dest=a.out or ('output' if a.topic.strip() else 'output/overview')
             result = export_design(repo,llm,a.topic,dest) if a.topic.strip() else export_overview(repo,dest,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume)
             print(json.dumps(result,ensure_ascii=False,indent=2));return 0

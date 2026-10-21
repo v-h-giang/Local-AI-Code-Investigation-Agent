@@ -129,6 +129,33 @@ class Repo:
             return 'Invalid table identifier.'
         return self.find_symbol(table, limit)
 
+    def _index_signature(self) -> tuple[str, int]:
+        """Fingerprint indexed source metadata; no file contents or secrets stored here."""
+        digest = hashlib.sha256()
+        files = self.files(limit=MAX_FILES)
+        for sf in files:
+            try:
+                stat = sf.fullpath.stat()
+                digest.update(f'{sf.path}\0{stat.st_size}\0{stat.st_mtime_ns}\n'.encode('utf-8'))
+            except OSError:
+                digest.update(f'{sf.path}\0missing\n'.encode('utf-8'))
+        return digest.hexdigest(), len(files)
+
+    def ensure_index(self) -> dict:
+        """Create or refresh SQLite FTS5 only when repository source metadata changes."""
+        signature, count = self._index_signature()
+        if self.db_path.is_file():
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    old = conn.execute("SELECT value FROM index_metadata WHERE key='signature'").fetchone()
+                    if old and old[0] == signature:
+                        return {'status':'up-to-date','files':count,'database':str(self.db_path)}
+            except sqlite3.DatabaseError:
+                pass  # Legacy v3 index has no metadata: rebuild once.
+        detail = self.index()
+        detail['status'] = 'created-or-refreshed'
+        return detail
+
     def index(self) -> dict:
         """Build FTS index; simple full reset guarantees no stale matches."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -148,6 +175,9 @@ class Repo:
                     conn.execute('INSERT INTO code_fts(path,start_line,end_line,content) VALUES(?,?,?,?)',
                                  (sf.path, i + 1, min(len(lines), i + 80), part))
                     chunks += 1
+            conn.execute('CREATE TABLE IF NOT EXISTS index_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+            signature, _ = self._index_signature()
+            conn.execute("INSERT OR REPLACE INTO index_metadata(key,value) VALUES ('signature',?)", (signature,))
             conn.commit()
             return {'files': len(files), 'chunks': chunks, 'database': str(self.db_path)}
         finally:
