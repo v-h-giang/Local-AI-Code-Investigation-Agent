@@ -1,3 +1,11 @@
+# Local AI Code Investigation Agent
+
+**Current version: v4 — full repository scan, durable per-chunk checkpoints and restartable analysis.**
+
+See [v4 usage and recovery instructions](README_V4.md).
+
+---
+
 # Quick start: automatic indexing
 
 You do **not** need to run `index` before `design` or `chat`. The agent checks source files and creates or refreshes the SQLite FTS5 index automatically on the first run and when source file size/mtime changes. Unchanged projects reuse the index. The `index` command remains available for manual forced rebuild. Indexing is a search cache and creates **no design document**.

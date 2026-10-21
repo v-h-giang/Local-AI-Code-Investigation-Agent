@@ -32,10 +32,10 @@ def main(argv=None):
     s.add_argument('--topic',default=''); s.add_argument('--out',default='output')
     s = sub.add_parser('overview',help='Automatically survey the full repository without a topic (optional AI)')
     s.add_argument('--out',default='output/overview'); s.add_argument('--ai',action='store_true',help='Also write AI architecture design using local Ollama')
-    s.add_argument('--max-batches',type=int,default=24); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=2); s.add_argument('--no-resume',action='store_true')
+    s.add_argument('--max-batches',type=int,default=None); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=1); s.add_argument('--no-resume',action='store_true')
     s = sub.add_parser('design',help='With --topic: feature design; without --topic: automated repo overview + AI')
     s.add_argument('--topic',default=''); s.add_argument('--out',default=None)
-    s.add_argument('--max-batches',type=int,default=24); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=2); s.add_argument('--no-resume',action='store_true')
+    s.add_argument('--max-batches',type=int,default=None); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=1); s.add_argument('--no-resume',action='store_true')
     a = p.parse_args(argv)
     print_ram_status()
     try:
@@ -59,12 +59,13 @@ def main(argv=None):
             return 0
         if a.command=='overview':
             print('[Overview] Surveying repository and generating outputs...', flush=True)
-            print(json.dumps(export_overview(repo,a.out,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume),ensure_ascii=False,indent=2));return 0
+            result=export_overview(repo,a.out,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume)
+            print(json.dumps(result,ensure_ascii=False,indent=2));return 2 if result.get('status') == 'incomplete' else 0
         if a.command=='design':
             print('[Design] Analyzing source and writing documents...', flush=True)
             dest=a.out or ('output' if a.topic.strip() else 'output/overview')
             result = export_design(repo,llm,a.topic,dest) if a.topic.strip() else export_overview(repo,dest,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume)
-            print(json.dumps(result,ensure_ascii=False,indent=2));return 0
+            print(json.dumps(result,ensure_ascii=False,indent=2));return 2 if result.get('status') == 'incomplete' else 0
         inv = Investigator(repo,llm)
         if a.command=='ask': print('\n'+inv.ask(a.question));return 0
         if a.command=='chat':

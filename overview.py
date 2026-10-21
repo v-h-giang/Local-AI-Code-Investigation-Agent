@@ -170,7 +170,7 @@ def _markdown(data: dict) -> str:
     return toc('\n'.join(lines))
 
 
-def export_overview(repo: Repo, target_dir: str | Path, *, llm: Ollama | None = None, verbose: bool = True, max_batches: int = 24, files_per_batch: int = 2, resume: bool = True) -> dict:
+def export_overview(repo: Repo, target_dir: str | Path, *, llm: Ollama | None = None, verbose: bool = True, max_batches: int | None = None, files_per_batch: int = 1, resume: bool = True) -> dict:
     target = Path(target_dir).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
     data = survey(repo)

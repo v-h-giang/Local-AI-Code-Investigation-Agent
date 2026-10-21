@@ -157,25 +157,28 @@ class StagedDesignTests(unittest.TestCase):
 
     def test_checkpoint_resume_skips_completed_ollama_calls(self):
         from overview import export_overview
+        import json
         class CountingLLM:
-            model='qwen3:8b'
-            num_ctx=2048
+            model='qwen3:8b'; num_ctx=2048
             def __init__(self): self.calls=0
             def call(self, messages, tools=False, **kwargs):
                 self.calls+=1
-                self.assertion = kwargs['num_predict'] <= 350
-                return {'content':'Phân tích có giới hạn: frontend/OrderScreen.mxml:13'}
+                return {'content':'Có dẫn chứng backend/OrderService.java:3'}
         llm=CountingLLM()
         out=Path(self.tmp.name)/'out'
-        first=export_overview(self.repo,out,llm=llm,max_batches=2,files_per_batch=2,verbose=False)
-        self.assertEqual(first['ai_files_analyzed'],4)
-        self.assertEqual(llm.calls,2)
-        second=export_overview(self.repo,out,llm=llm,max_batches=2,files_per_batch=2,verbose=False)
-        self.assertEqual(llm.calls,2)
-        self.assertEqual(second['ai_cached_batches'],2)
+        first=export_overview(self.repo,out,llm=llm,verbose=False)
+        count=llm.calls
+        manifest=json.loads((out/'analysis_manifest.json').read_text('utf-8'))
+        self.assertEqual(manifest['status'],'complete')
+        self.assertEqual(manifest['files_completed'],5)
+        self.assertGreaterEqual(manifest['chunks_completed'],5)
+        second=export_overview(self.repo,out,llm=llm,verbose=False)
+        self.assertEqual(llm.calls,count)
+        self.assertEqual(second['ai_cached_chunks'],manifest['chunks_completed'])
         self.assertIn('## Mục lục',(out/'architecture_design.md').read_text('utf-8'))
+        self.assertEqual(len(list((out/'analysis_files').glob('*.md'))),5)
 
-    def test_bounded_coverage_and_resumption_after_failure(self):
+    def test_resumes_after_failure_and_file_change(self):
         from overview import export_overview
         import json
         from agent_core import OllamaError
@@ -188,14 +191,38 @@ class StagedDesignTests(unittest.TestCase):
                 return {'content':'Có bằng chứng backend/OrderService.java:3'}
         out=Path(self.tmp.name)/'out'
         llm=UnstableLLM()
-        meta=export_overview(self.repo,out,llm=llm,max_batches=3,files_per_batch=1,verbose=False)
-        self.assertEqual(meta['ai_files_analyzed'],1)
-        self.assertEqual(meta['ai_failures'],1)
+        first=export_overview(self.repo,out,llm=llm,verbose=False)
         manifest=json.loads((out/'analysis_manifest.json').read_text('utf-8'))
-        self.assertEqual(manifest['files_unanalyzed'],4)
-        meta2=export_overview(self.repo,out,llm=llm,max_batches=3,files_per_batch=1,verbose=False)
-        self.assertEqual(meta2['ai_cached_batches'],1)
-        self.assertEqual(meta2['ai_files_analyzed'],3)
+        self.assertEqual(manifest['status'],'incomplete')
+        self.assertEqual(first['ai_failures'],1)
+        self.assertEqual(manifest['chunks_completed'],1)
+        restarted=export_overview(self.repo,out,llm=llm,verbose=False)
+        manifest2=json.loads((out/'analysis_manifest.json').read_text('utf-8'))
+        self.assertEqual(manifest2['status'],'complete')
+        self.assertGreaterEqual(restarted['ai_cached_chunks'],1)
+        self.assertEqual(manifest2['files_completed'],5)
+
+    def test_changed_file_reanalyzed(self):
+        from overview import export_overview
+        import shutil
+        class CountingLLM:
+            model='qwen3:8b';num_ctx=2048
+            def __init__(self):self.calls=0
+            def call(self, messages, tools=False, **kwargs):
+                self.calls+=1
+                return {'content':'Phân tích file có dẫn chứng'}
+        with tempfile.TemporaryDirectory() as root:
+            local=Path(root)/'src'
+            shutil.copytree(SAMPLE,local)
+            repo=Repo(local,Path(root)/'index.sqlite')
+            llm=CountingLLM()
+            out=Path(root)/'out'
+            export_overview(repo,out,llm=llm,verbose=False)
+            previous=llm.calls
+            changed=local/'backend'/'OrderService.java'
+            changed.write_text(changed.read_text('utf-8')+'\n// changed contents\n',encoding='utf-8')
+            export_overview(repo,out,llm=llm,verbose=False)
+            self.assertGreater(llm.calls,previous)
 
     def test_cli_design_defaults_to_8b_2048(self):
         import subprocess
