@@ -103,7 +103,8 @@ class OverviewTests(unittest.TestCase):
         meta=export_overview(self.repo,destination,llm=FakeLLM(),verbose=False)
         self.assertTrue(Path(meta['ai_design']).is_file())
         self.assertIn('OrderMapper.xml:4',Path(meta['ai_design']).read_text('utf-8'))
-        self.assertEqual(meta['tool_calls'],1)
+        self.assertEqual(meta['ai_files_analyzed'], 5)
+        self.assertTrue((destination/'analysis_manifest.json').exists())
 
     def test_cli_no_topic_static(self):
         import subprocess
@@ -147,3 +148,58 @@ class OllamaDiagnosticsTests(unittest.TestCase):
             self.assertIn('OK',llm.probe())
         self.assertEqual(observed[0]['options']['num_ctx'],4096)
         self.assertEqual(observed[1]['options']['num_ctx'],1024)
+
+class StagedDesignTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo=Repo(SAMPLE, Path(self.tmp.name)/'index.sqlite')
+
+    def test_checkpoint_resume_skips_completed_ollama_calls(self):
+        from overview import export_overview
+        class CountingLLM:
+            model='qwen3:8b'
+            num_ctx=2048
+            def __init__(self): self.calls=0
+            def call(self, messages, tools=False, **kwargs):
+                self.calls+=1
+                self.assertion = kwargs['num_predict'] <= 350
+                return {'content':'Phân tích có giới hạn: frontend/OrderScreen.mxml:13'}
+        llm=CountingLLM()
+        out=Path(self.tmp.name)/'out'
+        first=export_overview(self.repo,out,llm=llm,max_batches=2,files_per_batch=2,verbose=False)
+        self.assertEqual(first['ai_files_analyzed'],4)
+        self.assertEqual(llm.calls,2)
+        second=export_overview(self.repo,out,llm=llm,max_batches=2,files_per_batch=2,verbose=False)
+        self.assertEqual(llm.calls,2)
+        self.assertEqual(second['ai_cached_batches'],2)
+        self.assertIn('## Mục lục',(out/'architecture_design.md').read_text('utf-8'))
+
+    def test_bounded_coverage_and_resumption_after_failure(self):
+        from overview import export_overview
+        import json
+        from agent_core import OllamaError
+        class UnstableLLM:
+            model='qwen3:8b'; num_ctx=2048
+            def __init__(self): self.calls=0
+            def call(self, messages, tools=False, **kwargs):
+                self.calls+=1
+                if self.calls==2: raise OllamaError('memory exceeded')
+                return {'content':'Có bằng chứng backend/OrderService.java:3'}
+        out=Path(self.tmp.name)/'out'
+        llm=UnstableLLM()
+        meta=export_overview(self.repo,out,llm=llm,max_batches=3,files_per_batch=1,verbose=False)
+        self.assertEqual(meta['ai_files_analyzed'],1)
+        self.assertEqual(meta['ai_failures'],1)
+        manifest=json.loads((out/'analysis_manifest.json').read_text('utf-8'))
+        self.assertEqual(manifest['files_unanalyzed'],4)
+        meta2=export_overview(self.repo,out,llm=llm,max_batches=3,files_per_batch=1,verbose=False)
+        self.assertEqual(meta2['ai_cached_batches'],1)
+        self.assertEqual(meta2['ai_files_analyzed'],3)
+
+    def test_cli_design_defaults_to_8b_2048(self):
+        import subprocess
+        output=subprocess.run([sys.executable,str(SAMPLE.parent/'agent.py'),'--help'],capture_output=True,text=True)
+        self.assertEqual(output.returncode,0)
+        self.assertIn('default 2048', output.stdout)
+        self.assertIn('qwen3:8b',output.stdout)

@@ -27,7 +27,7 @@ class OllamaError(RuntimeError):
     pass
 
 class Ollama:
-    def __init__(self, host: str = 'http://127.0.0.1:11434', model: str = 'qwen3:4b', timeout: int = 240, num_ctx: int = 4096):
+    def __init__(self, host: str = 'http://127.0.0.1:11434', model: str = 'qwen3:8b', timeout: int = 240, num_ctx: int = 4096):
         url = parse.urlparse(host)
         if url.scheme != 'http' or url.hostname not in ('localhost', '127.0.0.1', '::1') or url.username or url.password or url.path not in ('', '/'):
             raise ValueError('For local-only operation, Ollama host must be loopback HTTP, e.g. http://127.0.0.1:11434')

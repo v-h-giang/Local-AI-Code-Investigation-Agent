@@ -13,9 +13,9 @@ from overview import export_overview
 def main(argv=None):
     p = argparse.ArgumentParser(description='Read-only local AI investigation of Java / SQL / Adobe AIR source')
     p.add_argument('--project', required=True, help='Local source project directory')
-    p.add_argument('--model', default='qwen3:4b', help='Ollama local model tag (default qwen3:4b for low-RAM PCs)')
+    p.add_argument('--model', default='qwen3:8b', help='Ollama local model tag (default qwen3:8b)')
     p.add_argument('--host', default='http://127.0.0.1:11434', help='Loopback Ollama endpoint')
-    p.add_argument('--num-ctx', type=int, default=4096, help='Ollama context tokens (default 4096; try 2048 with limited RAM)')
+    p.add_argument('--num-ctx', type=int, default=2048, help='Ollama context tokens (default 2048, suitable for limited RAM)')
     p.add_argument('--timeout', type=int, default=240, help='HTTP response timeout in seconds (default 240)')
     sub = p.add_subparsers(dest='command', required=True)
     d = sub.add_parser('doctor', help='Verify Ollama and report source summary')
@@ -31,8 +31,10 @@ def main(argv=None):
     s.add_argument('--topic',default=''); s.add_argument('--out',default='output')
     s = sub.add_parser('overview',help='Automatically survey the full repository without a topic (optional AI)')
     s.add_argument('--out',default='output/overview'); s.add_argument('--ai',action='store_true',help='Also write AI architecture design using local Ollama')
+    s.add_argument('--max-batches',type=int,default=24); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=2); s.add_argument('--no-resume',action='store_true')
     s = sub.add_parser('design',help='With --topic: feature design; without --topic: automated repo overview + AI')
     s.add_argument('--topic',default=''); s.add_argument('--out',default=None)
+    s.add_argument('--max-batches',type=int,default=24); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=2); s.add_argument('--no-resume',action='store_true')
     a = p.parse_args(argv)
     try:
         repo = Repo(a.project)
@@ -50,10 +52,10 @@ def main(argv=None):
                 print(llm.probe())
             return 0
         if a.command=='overview':
-            print(json.dumps(export_overview(repo,a.out,llm=llm),ensure_ascii=False,indent=2));return 0
+            print(json.dumps(export_overview(repo,a.out,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume),ensure_ascii=False,indent=2));return 0
         if a.command=='design':
             dest=a.out or ('output' if a.topic.strip() else 'output/overview')
-            result = export_design(repo,llm,a.topic,dest) if a.topic.strip() else export_overview(repo,dest,llm=llm)
+            result = export_design(repo,llm,a.topic,dest) if a.topic.strip() else export_overview(repo,dest,llm=llm,max_batches=a.max_batches,files_per_batch=a.files_per_batch,resume=not a.no_resume)
             print(json.dumps(result,ensure_ascii=False,indent=2));return 0
         inv = Investigator(repo,llm)
         if a.command=='ask': print('\n'+inv.ask(a.question));return 0

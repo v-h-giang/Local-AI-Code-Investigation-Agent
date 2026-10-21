@@ -32,7 +32,7 @@ Agent chạy trên **Ollama localhost**, hoạt động trong terminal VS Code, 
 - Windows 10/11, VS Code (tùy chọn, tiện dùng).
 - Ollama cho Windows: <https://ollama.com/download/windows>
 - Python 3.11+ (chỉ dùng standard library, không yêu cầu `pip install`).
-- Nếu máy khoảng 15–16 GB RAM: model mặc định `qwen3:4b` Q4_K_M (~5.2 GB tải xuống), cân nhắc `qwen2.5-coder:7b` (~4.7 GB) nếu ưu tiên chuyên code. Dung lượng model **không phải tổng RAM lúc chạy**, còn KV cache và context.
+- Nếu máy khoảng 15–16 GB RAM: model mặc định `qwen3:8b` (kích thước tải xuống khoảng 5.2 GB); nếu chỉ còn khoảng 5 GB RAM trống, việc chạy model có thể thất bại hoặc phải dùng pagefile, cân nhắc `qwen2.5-coder:7b` (~4.7 GB) nếu ưu tiên chuyên code. Dung lượng model **không phải tổng RAM lúc chạy**, còn KV cache và context.
 - Bắt đầu với `num_ctx=4096` do máy RAM hạn chế, chỉnh trong `agent_core.py` nếu đủ tài nguyên.
 
 <a id="install"></a>
@@ -41,7 +41,7 @@ Agent chạy trên **Ollama localhost**, hoạt động trong terminal VS Code, 
 **Bước 1.** Cài Ollama cho Windows. Mở PowerShell và pull model:
 
 ```powershell
-ollama pull qwen3:4b
+ollama pull qwen3:8b
 ollama list
 ```
 
@@ -202,8 +202,8 @@ py -3 -m unittest discover -s tests -v
 ```
 
 - `Ollama not reachable`: mở Ollama, kiểm tra `http://127.0.0.1:11434/api/tags`, tránh chạy 2 server cùng cổng.
-- `model not found`: `ollama pull qwen3:4b`.
-- Chậm hoặc hết RAM: dùng `--model qwen3:4b` sau khi `ollama pull qwen3:4b`; thử `--num-ctx 2048` ngay trên lệnh chạy agent.
+- `model not found`: `ollama pull qwen3:8b`.
+- Chậm hoặc hết RAM: thử `--num-ctx 2048` với `qwen3:8b`; nếu vẫn không đủ bộ nhớ, chỉ khi bạn chủ động chọn model nhẹ hơn mới dùng `ollama pull qwen3:4b` và `--model qwen3:4b`.
 - Kết quả chưa có dẫn chứng: yêu cầu AI dùng `search_code`, `read_file`, kiểm tra các file:line của câu trả lời.
 - Sai encoding source Nhật: reader thử `UTF-8-SIG`, `CP932`, `UTF-16`, rồi thay thế ký tự khi cần; hãy kiểm tra file đầu vào.
 
@@ -225,9 +225,9 @@ The older v2 error `Cannot connect to local Ollama` could mask request timeouts 
 ```powershell
 ollama list
 Invoke-RestMethod http://127.0.0.1:11434/api/tags
-ollama run qwen3:4b "Reply OK"
-py -3 agent.py --project ".\sample_project" --model qwen3:4b --num-ctx 2048 doctor --probe
-py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:4b --num-ctx 2048 design
+ollama run qwen3:8b "Reply OK"
+py -3 agent.py --project ".\sample_project" --model qwen3:8b --num-ctx 2048 doctor --probe
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 design
 ```
 
 In `doctor --probe`, the application **actually requests text generation** with context 1024 to distinguish an available HTTP server from a model that can be loaded. It does not check available RAM or guarantee that longer design requests will work.
@@ -235,7 +235,7 @@ In `doctor --probe`, the application **actually requests text generation** with 
 How to interpret output:
 
 - `Ollama not reachable`: endpoint/port/server issue. Check `ollama serve` if not already running.
-- `HTTP 404` or a model-not-found message: check `ollama list`, `ollama pull qwen3:4b`, then use `--model qwen3:4b`.
+- `HTTP 404` or a model-not-found message: check `ollama list`, `ollama pull qwen3:8b`, then use `--model qwen3:8b`.
 - `HTTP 500`, `out of memory`, `model requires more memory`: model loading/memory failure; close memory-heavy applications, reduce model/context.
 - `Timed out waiting for model generation`: model/server did not respond before `--timeout` seconds. Try `--timeout 600` only if the model can demonstrably load and remains responsive.
 - `Connection closed during request`: Ollama process may have crashed or restarted; inspect the Ollama application log, Windows Event Viewer and memory availability. This is not by itself proof of OOM.
@@ -249,3 +249,37 @@ py -3 agent.py --project "D:\Work\LegacyProject" overview --out ".\output\overvi
 The offline mode generates `system_overview.md`, `.drawio`, `.csv`, and `.json`, but not the AI-written `architecture_design.md`.
 
 **New global parameters:** `--num-ctx 2048` (lower context) and `--timeout 600` (longer response timeout). Global parameters must appear **before** the subcommand (`design`, `doctor`, `chat`).
+
+---
+
+## v3 — Phân tích toàn repository theo lô, dành cho RAM trống khoảng 5 GB
+
+**Model mặc định giữ nguyên `qwen3:8b`.** CLI mặc định `--num-ctx 2048` (có thể tăng thủ công). Chỉ cần chỉ định đường dẫn project; không cần biết tên chức năng.
+
+```powershell
+ollama serve
+# Trong cửa sổ PowerShell khác:
+ollama list
+py -3 agent.py --project "D:\Work\LegacyProject" index
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 design --out "D:\AgentOutput\overview"
+```
+
+### Các pha thực thi
+
+1. **Quét tĩnh tất cả file đủ điều kiện** (tối đa 25.000 file, mỗi file tối đa 1 MB), ghi `repository_files.csv`, `repository_overview.json`, `system_overview.md`, `system_overview.drawio`. Quét tĩnh không yêu cầu Ollama.
+2. **Ưu tiên các file có dấu hiệu entrypoint/handler/mapper**, chọn luân phiên từ các nhóm module để tránh chỉ đọc nhóm lớn nhất.
+3. **Phân tích các đoạn source ngắn** (tối đa 2 file/lô, tối đa 1.350 ký tự bằng chứng mỗi file) bằng các request Ollama độc lập, không nạp toàn repo vào context.
+4. **Lưu checkpoint** `.investigation_cache/batch_*.json` sau từng lô. Nếu model bị thiếu bộ nhớ/timeout, tài liệu và các phần đã hoàn thành vẫn được lưu. Chạy lại cùng lệnh sẽ dùng cache.
+5. **Xuất** `architecture_design.md` (có mục lục), `analysis_manifest.json` (số file quét/AI phân tích/chưa phân tích), cùng danh mục và sơ đồ tĩnh.
+
+Mặc định mỗi lượt phân tích tối đa **24 lô × 2 file = 48 file**. Đây là ngân sách AI, **không phải giới hạn quét tĩnh repository**. Có thể mở rộng:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 design --max-batches 120 --files-per-batch 1 --out "D:\AgentOutput\overview"
+```
+
+Các lô đã hoàn thành không cần chạy lại trừ khi model, context, nội dung bằng chứng hoặc prompt thay đổi. Muốn chạy lại chủ động thêm `--no-resume`.
+
+Trong chat, `/overview` chỉ quét tĩnh; `/design-all` thực hiện quy trình AI theo lô mặc định.
+
+**Giới hạn:** phương pháp này tạo bản khảo sát có dẫn chứng và các phân tích cục bộ, **chưa tự xác minh call graph runtime, chưa gộp tất cả chức năng thành một thiết kế chi tiết**, và không bảo đảm đoạn trích đại diện cho toàn bộ nội dung file. `analysis_manifest.json` thể hiện chính xác mức bao phủ. Với repository lớn, nên dùng `--max-batches` cao hơn và kiểm duyệt kết quả theo từng module. Output có thể chứa trích đoạn code nội bộ, vì vậy không công bố công khai.
