@@ -1,3 +1,5 @@
+**v4.5 FE/BE/DB architecture:** [read documentation](README_STACK_ARCHITECTURE.md).
+
 > **v4.4:** `architecture --ai-summary` now removes the AI method column from Markdown and stores JSON/CSV/checkpoints in `middle-files/`. Existing v4.3 intermediate files are migrated automatically.
 
 > **v4.3:** Module Summary uses the cached architecture graph, including inter-module links, source comment evidence, declared dependencies and SQL references. Reuses architecture.json when source metadata is unchanged; see [README_ARCHITECTURE.md](README_ARCHITECTURE.md).

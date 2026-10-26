@@ -50,6 +50,8 @@ def main(argv=None):
             result = export_architecture(repo,a.out)
             llm = Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx) if a.ai_summary else None
             result.update(summarize_modules(repo,a.out,llm=llm))
+            from stack_architecture import export_stack_architecture
+            result.update(export_stack_architecture(repo,a.out))
             print(json.dumps(result,ensure_ascii=False,indent=2));return 0
         if a.command=='search': print(repo.search_code(a.query, a.pattern, a.limit));return 0
         if a.command=='refs': print(repo.find_symbol(a.symbol));return 0
