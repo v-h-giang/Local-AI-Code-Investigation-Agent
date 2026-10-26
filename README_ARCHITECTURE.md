@@ -44,51 +44,44 @@ Các cạnh `exact` khớp full qualified class name; `candidate-name-only` ch�
 - Không đọc/chạy SQL, không sửa source.
 - Với monorepo nhiều phiên bản class trùng FQN, quan hệ mơ hồ được ghi vào `unresolved` trong JSON, không vẽ cạnh tùy tiện.
 
-## v4.2 — Module Summary
+## Module Summary (v4.2)
 
-Sau khi xây bản đồ liên kết, lệnh `architecture` tự thu thập một mẫu comment/Javadoc/AS3/MXML và khai báo class/method theo module cấp một, rồi tạo:
+Chạy lệnh `architecture` như cũ để xuất thêm `module_summary.md` và `module_summary.json`.
+Bản mặc định **không dùng AI**, liệt kê comment/Javadoc/AS3/MXML và các khai báo đáng chú ý với đường dẫn và số dòng. Nó không tự khẳng định chức năng nghiệp vụ nếu source không đủ bằng chứng.
 
-- `module_summary.md`: vai trò tạm xác định và dẫn chứng `file:line`, có mục lục.
-- `module_summary.json`: dữ liệu comment, khai báo và kết quả tóm tắt của từng module.
-- `.module_summary_cache/`: cache kết quả AI khi dùng `--ai-summary`.
-
-Không cần Ollama:
+Muốn Qwen3:8B tóm tắt vai trò các module từ những bằng chứng đã trích:
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" architecture --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" --num-ctx 2048 architecture --ai-summary --out "D:\AgentOutput\architecture"
 ```
 
-Có Ollama và muốn thêm tóm tắt bằng Qwen3:8B:
+AI tối đa **một lời gọi cho mỗi module cấp 1** trong lần đầu, lưu checkpoint theo model/context/evidence tại `.module_summary_cache/`. Nếu lỗi Ollama, module đó vẫn có summary offline và được ghi lỗi vào JSON. Những lần sau dùng lại cache. Không phân tích hàng triệu chunk; tài liệu có mục lục và dẫn chứng `path:line`.
+
+Giới hạn: chỉ chọn comment và khai báo tiêu biểu, không xem đây là phân tích đủ mọi luồng chức năng; comment có thể lỗi thời, trùng tên module không đảm bảo đúng ranh giới nghiệp vụ. Output có thể chứa trích đoạn source nội bộ, cần bảo quản như mã nguồn.
+
+## v4.3 — Architecture Graph → Module Evidence → AI Summary
+
+`architecture --ai-summary` nay **dùng trực tiếp `architecture.json`** để tổng hợp ngữ cảnh cho từng module. Luồng xử lý:
+
+1. **Architecture Graph** — đọc `architecture.json` (gồm danh sách module, các cạnh file→file có loại quan hệ và mức tin cậy, dependency manifests, và heuristic bảng SQL). Nếu project và metadata `(path,size,mtime_ns)` của các source đủ điều kiện không đổi thì tái sử dụng graph thay vì phân tích lại tất cả nội dung source.
+2. **Module Evidence** — lựa chọn tối đa 32 file/module, ưu tiên file được nhiều cạnh liên kết và một số loại file đại diện. Chỉ những file này được mở lại để lấy comment/Javadoc, khai báo class/method có `path:line`.
+3. **AI Summary** — với `--ai-summary`, Ollama `qwen3:8b` đọc bằng chứng comment/khai báo, liên kết **outgoing/incoming/internal**, thư viện ở module hoặc root project và các bảng SQL liên quan. Giữ request ngắn cho `--num-ctx 2048`, sử dụng `.module_summary_cache/` để checkpoint từng module.
+
+Lệnh chạy không đổi:
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 architecture --ai-summary --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --ai-summary --out "D:\AgentOutput\architecture"
 ```
 
-AI dùng các trích dẫn đại diện để phác thảo vai trò module, **không** xác minh toàn bộ runtime flow và không đọc toàn bộ source qua LLM. Module hiện dựa trên thư mục cấp một; comment có thể đã lỗi thời. Cache tái sử dụng nếu prompt, model, context không đổi.
+**Giới hạn:** Lần nâng cấp v4.2→v4.3 sẽ phải tạo lại graph một lần do thay đổi định dạng và version. Sau đó chỉ kiểm tra metadata nếu source không đổi. Đây là kiểm tra nhanh theo mtime và size, không phải so sánh SHA256 từng file. Các thay đổi mtime/size không phản ánh đúng nội dung (hiếm gặp) có thể làm cache chưa được làm mới; trong trường hợp này xóa riêng `architecture.json` và chạy lại. Root Maven/Gradle dependencies được ghi `repository-declared, module use unverified` vì chúng không chứng minh module nào thực sự sử dụng thư viện. Import, mapper và bảng SQL là quan hệ tĩnh/heuristic, không chứng minh hành vi runtime. Không dùng `--no-resume`; cache module summary tự tái sử dụng khi prompt không đổi.
 
-## v4.3 — Graph → Module Evidence → AI Summary
+Xem `module_summary.json` trường `graph_context` để biết đầy đủ cạnh, thư viện và bảng SQL đã được cung cấp cho phần tổng hợp; `module_summary.md` hiển thị các bằng chứng quan trọng cùng trích dẫn `file:line`.
 
-`architecture --ai-summary` sử dụng `architecture.json` đã tạo, thay vì quét lại mọi file source để tóm tắt module:
+## v4.4 — Output layout
 
-1. **Architecture Graph:** file links (incoming, outgoing, internal), Maven/Gradle/Ivy dependencies, bảng SQL.
-2. **Module Evidence:** chọn tối đa 32 file tiêu biểu dựa trên số liên kết và tên file; lấy comment, Javadoc và khai báo có `path:line`.
-3. **AI Summary:** Qwen3:8b phân tích bằng chứng đã rút gọn trong context 2048. Các liên kết import chỉ là quan hệ tĩnh, không chứng minh runtime call.
+Final reports remain at the output root: `architecture.md`, `architecture.drawio`, and `module_summary.md`.
 
-```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 architecture --ai-summary --out "D:\AgentOutput\architecture"
-```
-
-Trong lần chạy lại, agent tái sử dụng `architecture.json` nếu đường dẫn project và **path/size/mtime** của các file không đổi. Khi source thay đổi, agent tạo lại graph. Lưu ý metadata không phải hash nội dung mật mã; nếu thay đổi file mà giữ nguyên size/mtime, cần xóa `architecture.json` để quét mới.
-
-Kết quả `module_summary.md` và `module_summary.json` có thêm `graph_context`, liên kết module đi vào/đi ra, mức độ tin cậy, thư viện khai báo, SQL table và dẫn chứng. Thư viện khai báo tại root chỉ được ghi là *repository-declared, module use unverified*, không tự coi là dependency trực tiếp của từng module.
-
-AI cache tại `.module_summary_cache` vẫn dùng hash của prompt/model/context. Khi đầu vào không đổi, lượt chạy sau không gọi lại AI cho module đã có kết quả.
-
-**Giới hạn:** module vẫn dựa theo thư mục cấp 1; parsing mang tính heuristic, không xác minh runtime graph; chỉ đưa mẫu bằng chứng vào Qwen, không đọc toàn bộ source qua model.
-
-## v4.4 — Clean output layout
-
-The generated reports `architecture.md`, `architecture.drawio` and `module_summary.md` remain directly in the output folder. Machine-readable intermediates are now under `middle-files/`:
+Intermediate files and resumable AI cache are organized in `middle-files/`:
 
 ```text
 output/architecture/
@@ -97,10 +90,10 @@ output/architecture/
 ├── module_summary.md
 └── middle-files/
     ├── architecture.json
-    ├── module_summary.json
     ├── dependencies.csv
     ├── file_links.csv
+    ├── module_summary.json
     └── .module_summary_cache/
 ```
 
-The main table of `module_summary.md` has only Module, File and Vai trò tạm xác định. Provenance and method metadata remain in `middle-files/module_summary.json`. Existing v4.3 JSON/CSV files and AI cache are migrated to `middle-files/` automatically without discarding valid checkpoints.
+The main Module Summary table no longer contains an AI method column. The JSON intermediate file retains its detailed provenance fields for diagnostics. Existing v4.3 intermediate files and AI checkpoints are migrated on the next execution; unchanged source retains architecture reuse and AI cache behavior.

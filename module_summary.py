@@ -36,20 +36,22 @@ def _atomic_json(path, value):
         if temporary.exists():temporary.unlink()
 
 
-def _ranked_files(graph,module,max_files=32):
+def _ranked_files(graph, module, max_files=32):
+    """Choose a diverse, graph-connected source sample without reading every file."""
     paths=[p for p,_,_ in graph['source_inventory'] if _module(p)==module]
     weighted=Counter()
     for e in graph['edges']:
-        if _module(e['from'])==module:weighted[e['from']]+=5
-        if _module(e['to'])==module:weighted[e['to']]+=3
+        if _module(e['from'])==module: weighted[e['from']]+=5
+        if _module(e['to'])==module: weighted[e['to']]+=3
     for d in graph['dependencies']:
         if _module(d['declared_in'])==module:weighted[d['declared_in']]+=4
+    # Prioritize entrypoints/service/mapper/build manifests to span responsibilities.
     def score(p):
         name=Path(p).name.lower()
         hint=3 if any(x in name for x in ('service','controller','mapper','repository','screen','application','pom.xml','build.gradle')) else 0
         return (-weighted[p]-hint,p)
     by_ext=defaultdict(list)
-    for p in sorted(paths,key=score):by_ext[Path(p).suffix.lower()].append(p)
+    for p in sorted(paths,key=score): by_ext[Path(p).suffix.lower()].append(p)
     chosen=[]
     for ext in sorted(by_ext):
         if by_ext[ext]:chosen.append(by_ext[ext][0])
@@ -59,17 +61,19 @@ def _ranked_files(graph,module,max_files=32):
     return chosen[:max_files]
 
 
-def collect_module_evidence(repo:Repo,graph:dict,*,sample_cap=32,comments_per_file=3,declarations_per_file=3):
+def collect_module_evidence(repo: Repo, graph: dict, *, sample_cap=32,
+                            comments_per_file=3, declarations_per_file=3):
+    """Read selected graph-linked source files rather than rescanning the repository."""
     modules={}
-    for module,info in sorted(graph['modules'].items()):
-        selected=_ranked_files(graph,module,sample_cap)
-        entry={'files':info['files'],'types':info['types'],'comments':[],'declarations':[],
-               'file_examples':selected[:25],'files_sampled':len(selected),'errors':[]}
+    for name,info in sorted(graph['modules'].items()):
+        selected=_ranked_files(graph,name,sample_cap)
+        entry={'files':info['files'],'types':info['types'],'comments':[],
+               'declarations':[],'file_examples':selected[:25], 'files_sampled':len(selected),'errors':[]}
         for rel in selected:
-            try:lines=repo._read(repo._safe(rel)).splitlines()
+            try:
+                lines=repo._read(repo._safe(rel)).splitlines()
             except (OSError,ValueError) as exc:
-                entry['errors'].append(f'{rel}: {str(exc)[:100]}')
-                continue
+                entry['errors'].append(f'{rel}: {str(exc)[:100]}');continue
             found_comments=found_declarations=0
             inside_block=False
             for n,line in enumerate(lines,1):
@@ -97,37 +101,47 @@ def collect_module_evidence(repo:Repo,graph:dict,*,sample_cap=32,comments_per_fi
                         entry['declarations'].append({'source':f'{rel}:{n}',
                             'text':SECRET.sub('[REDACTED]',strip[:180])})
                         found_declarations+=1
-        modules[module]=entry
+        modules[name]=entry
     return modules
 
 
-def module_graph_context(graph,module,*,max_edges=12,max_deps=10,max_tables=8):
-    outgoing=[];incoming=[];internal=[]
+def module_graph_context(graph: dict, module: str, *, max_edges=12, max_deps=10, max_tables=8):
+    """Traceable context for each module: inbound/outbound, libraries and SQL."""
+    outgoing=[]; incoming=[]; internal=[]
     for e in graph['edges']:
-        source=_module(e['from']);target=_module(e['to'])
-        if source==module and target==module:internal.append(e)
-        elif source==module:outgoing.append(e)
-        elif target==module:incoming.append(e)
+        source_mod=_module(e['from']); target_mod=_module(e['to'])
+        if source_mod==module and target_mod==module:
+            internal.append(e)
+        elif source_mod==module and target_mod!=module:
+            outgoing.append(e)
+        elif target_mod==module and source_mod!=module:
+            incoming.append(e)
+    # Prioritize explicitly resolved paths over candidate-name-only evidence.
     rank=lambda e:(e['confidence']!='exact',e['from'],e['line'])
-    deps=[dict(d,scope='module-declared') for d in graph['dependencies']
-          if _module(d['declared_in'])==module][:max_deps]
-    if module!='(root)' and len(deps)<max_deps:
-        deps += [dict(d,scope='repository-declared, module use unverified')
-                 for d in graph['dependencies'] if _module(d['declared_in'])=='(root)'][:max_deps-len(deps)]
-    tables=[{'name':t['name'],'sources':[p for p in t['files'] if _module(p)==module][:3]}
-            for t in graph['sql_tables'] if any(_module(p)==module for p in t['files'])][:max_tables]
-    return {'outgoing':sorted(outgoing,key=rank)[:max_edges],
-            'incoming':sorted(incoming,key=rank)[:max_edges],
-            'internal':sorted(internal,key=rank)[:max_edges],
-            'libraries':deps,'sql_tables':tables,
+    outbound=sorted(outgoing,key=rank)[:max_edges]
+    inbound=sorted(incoming,key=rank)[:max_edges]
+    internal=sorted(internal,key=rank)[:max_edges]
+    dependencies=[dict(d,scope='module-declared') for d in graph['dependencies']
+                  if _module(d['declared_in'])==module][:max_deps]
+    if module!='(root)' and len(dependencies)<max_deps:
+        # Root POM / Gradle declarations describe repository-wide dependencies.
+        # Their use by any particular module is NOT proven.
+        dependencies += [dict(d,scope='repository-declared, module use unverified')
+                         for d in graph['dependencies']
+                         if _module(d['declared_in'])=='(root)'][:max_deps-len(dependencies)]
+    tables=[{'name':table['name'],'sources':[p for p in table['files'] if _module(p)==module][:3]}
+             for table in graph['sql_tables'] if any(_module(p)==module for p in table['files'])][:max_tables]
+    return {'outgoing':outbound,'incoming':inbound,'internal':internal,
+            'libraries':dependencies,'sql_tables':tables,
             'outgoing_total':len(outgoing),'incoming_total':len(incoming)}
 
 
-def _graph_prompt(context,max_chars=2100):
+def _graph_prompt(context, max_chars=2100):
     lines=['GRAPH EVIDENCE (static only; import != runtime call):']
     for direction in ('outgoing','incoming','internal'):
         for e in context[direction][:7]:
-            lines.append(f'{direction}: {e["from"]}:{e["line"]} -> {e["to"]} kind={e["kind"]}, confidence={e["confidence"]}')
+            lines.append(f'{direction}: {e["from"]}:{e["line"]} -> {e["to"]} '
+                         f'kind={e["kind"]}, confidence={e["confidence"]}')
     for d in context['libraries'][:7]:
         lines.append(f'library: {d["library"]} ({d["ecosystem"]}) declared in {d["declared_in"]}, scope={d["scope"]}')
     for t in context['sql_tables'][:5]:
@@ -169,8 +183,9 @@ def summarize_modules(repo: Repo, out: str | Path, *, graph=None, llm=None, verb
     destination=Path(out).expanduser().resolve()
     destination.mkdir(parents=True,exist_ok=True)
     middle=_middle_dir(destination)
-    graph=graph or load_architecture(repo,destination)
-    if graph is None:raise ValueError('architecture.json missing/stale; rerun architecture first')
+    graph = graph or load_architecture(repo, destination)
+    if graph is None:
+        raise ValueError('architecture.json is missing/stale; run architecture discovery first')
     modules=collect_module_evidence(repo,graph)
     # Avoid dumping sensitive comments or full source in default Markdown;
     # selected short comments and declarations are still project-source-derived.
@@ -181,6 +196,7 @@ def summarize_modules(repo: Repo, out: str | Path, *, graph=None, llm=None, verb
         description=_predict_static(record)
         ai_status='offline'
         graph_context=module_graph_context(graph,name)
+        # Budget fits the configured 2048-token Qwen context without sending full graph.
         evidence=_evidence_for_ai(record,max_chars=1750)
         graph_evidence=_graph_prompt(graph_context,max_chars=1750)
         if llm is not None and (evidence or graph_evidence):
@@ -232,7 +248,8 @@ def summarize_modules(repo: Repo, out: str | Path, *, graph=None, llm=None, verb
             lines.append(f'- Library: `{d["library"]}` ({d["ecosystem"]}) declared in `{d["declared_in"]}`; scope: {d["scope"]}')
         for t in item['graph_context']['sql_tables'][:6]:
             lines.append(f'- SQL table: `{t["name"]}` in {", ".join(t["sources"])}')
-        lines += ['', '**Comment có dẫn chứng (mẫu)**','']
+        lines += ['',
+            '**Comment có dẫn chứng (mẫu)**','']
         for c in r['comments'][:18]:lines.append(f'- `{c["source"]}` — {c["text"].replace(chr(10)," ")}')
         if not r['comments']:lines.append('- Chưa phát hiện comment có ý nghĩa trong mẫu quét.')
         lines+=['','**Khai báo đáng chú ý (mẫu)**','']

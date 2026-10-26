@@ -1,4 +1,4 @@
-"""v4.3: reuse architecture graph as the source of module context."""
+"""v4.3 graph-to-evidence-to-summary integration tests, no model server needed."""
 import json
 import tempfile
 import unittest
@@ -8,15 +8,17 @@ from module_summary import summarize_modules
 from codebase import Repo
 
 class SpyLLM:
-    model='qwen3:8b'
-    num_ctx=2048
-    def __init__(self):self.prompts=[]
-    def call(self,messages,**kwargs):
-        self.prompts.append(messages[-1]['content'])
-        return {'content':'Vai trò dựa trên source và graph; runtime chưa được xác minh.'}
+    model = 'qwen3:8b'
+    num_ctx = 2048
+    def __init__(self):
+        self.prompts = []
+    def call(self, messages, **kwargs):
+        prompt = messages[-1]['content']
+        self.prompts.append(prompt)
+        return {'content': 'Vai trò suy ra từ comment, class và graph; cần xác minh runtime.'}
 
 class GraphSummaryTests(unittest.TestCase):
-    def test_graph_dependencies_comments_caching_and_source_changes(self):
+    def test_architecture_reuse_graph_evidence_and_cache(self):
         with tempfile.TemporaryDirectory() as root:
             src=Path(root)/'project'
             for name in ['service','data']:(src/name).mkdir(parents=True)
@@ -28,8 +30,8 @@ class GraphSummaryTests(unittest.TestCase):
             out=Path(root)/'out'
             first=export_architecture(repo,out,verbose=False)
             self.assertFalse(first['reused_graph'])
-            second=export_architecture(repo,out,verbose=False)
-            self.assertTrue(second['reused_graph'])
+            reused=export_architecture(repo,out,verbose=False)
+            self.assertTrue(reused['reused_graph'])
             llm=SpyLLM()
             result=summarize_modules(repo,out,llm=llm,verbose=False)
             self.assertTrue(result['graph_reused_for_summary'])
@@ -50,9 +52,9 @@ class GraphSummaryTests(unittest.TestCase):
             changed=src/'service'/'OrderService.java'
             changed.write_text(changed.read_text(encoding='utf-8')+'\n// new behavior documentation\n',encoding='utf-8')
             self.assertIsNone(load_architecture(repo,out))
-            rebuilt=export_architecture(repo,out,verbose=False)
-            self.assertFalse(rebuilt['reused_graph'])
+            new=export_architecture(repo,out,verbose=False)
+            self.assertFalse(new['reused_graph'])
             summarize_modules(repo,out,llm=llm,verbose=False)
             self.assertGreater(len(llm.prompts),3)
 
-if __name__=='__main__':unittest.main()
+if __name__ == '__main__': unittest.main()

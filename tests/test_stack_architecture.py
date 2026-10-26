@@ -38,7 +38,8 @@ class StackArchitectureTests(unittest.TestCase):
             self.assertEqual(data['databases']['PostgreSQL']['confidence'],'connection-string-or-driver')
             for key in ['fe_diagram','be_diagram','fe_reference','be_reference','fe_be_diagram']:
                 self.assertEqual(ET.parse(result[key]).getroot().tag,'mxfile')
-            self.assertIn('Objects', (out/'stack_architecture.md').read_text('utf8'))
+            self.assertIn('Object', (out/'stack_architecture.md').read_text('utf8'))
+            self.assertIn('module_summary.json',str(out/'middle-files/module_summary.json'))
 
     def test_no_invented_database(self):
         with tempfile.TemporaryDirectory() as tmp:

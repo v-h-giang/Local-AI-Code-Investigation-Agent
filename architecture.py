@@ -8,13 +8,15 @@ import json
 import os
 import re
 import xml.etree.ElementTree as ET
+import math
 from collections import Counter, defaultdict
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 from codebase import EXCLUDE_DIRS, MAX_BYTES, Repo
 
-CODE_EXTS = {'.java','.as','.mxml','.sql','.xml','.jsp','.jspx','.xhtml','.fxml','.hbm'}
+CODE_EXTS = {'.java','.as','.mxml','.sql','.xml','.jsp','.jspx','.xhtml','.fxml','.hbm',
+             '.properties','.yaml','.yml','.toml'}
 CONFIG_NAMES = {'pom.xml','build.gradle','build.gradle.kts','settings.gradle','settings.gradle.kts',
                 'gradle.properties','libs.versions.toml','ivy.xml','build.xml','application.xml',
                 'air-app.xml','settings.xml','MANIFEST.MF'}
@@ -92,53 +94,64 @@ def _extract_deps(path: str, text: str):
 
 
 def _format_drawio(modules, edges, destination: Path, node_cap=100):
-    """Draw.io module graph with larger arrows and node spacing."""
-    top=sorted(modules.items(),key=lambda kv:(-kv[1]['count'],kv[0]))[:node_cap]
-    identifiers={name:f'm{i+2}' for i,(name,_) in enumerate(top)}
-    graph=Counter()
+    """Draw.io top-level module graph with larger arrows and readable spacing."""
+    top = sorted(modules.items(), key=lambda kv: (-kv[1]['count'], kv[0]))[:node_cap]
+    names = [x[0] for x in top]
+    identifiers = {name: f'm{i+2}' for i, name in enumerate(names)}
+    graph = Counter()
     for edge in edges:
-        a,b=_module(edge['from']),_module(edge['to'])
-        if a!=b and a in identifiers and b in identifiers:graph[a,b]+=1
-    columns=4 if len(top)>8 else (3 if len(top)>3 else 2)
-    rows=max(1,(len(top)+columns-1)//columns)
-    width,height=470,145
-    xgap,ygap=80,75
-    root=ET.Element('mxfile',{'host':'app.diagrams.net','type':'device'})
-    diagram=ET.SubElement(root,'diagram',{'id':'architecture','name':'Static module dependencies'})
-    model=ET.SubElement(diagram,'mxGraphModel',{
-        'grid':'1','page':'1','pageScale':'1',
-        'pageWidth':str(max(2200,120+columns*(width+xgap))),
-        'pageHeight':str(max(1800,160+rows*(height+ygap)))})
-    group=ET.SubElement(model,'root')
-    ET.SubElement(group,'mxCell',{'id':'0'})
-    ET.SubElement(group,'mxCell',{'id':'1','parent':'0'})
-    for i,(name,info) in enumerate(top):
-        c,r=i%columns,i//columns
-        label=f'{name}\n{info["count"]} files\n'+', '.join(k+':'+str(v) for k,v in info['types'].most_common(3))
-        cell=ET.SubElement(group,'mxCell',{
-            'id':identifiers[name],'value':label,
-            'style':'rounded=1;whiteSpace=wrap;html=0;fillColor=#e8f0fb;strokeColor=#577398;'
-                    'align=center;verticalAlign=middle;fontSize=14;fontStyle=1;spacing=8;',
-            'vertex':'1','parent':'1'})
-        ET.SubElement(cell,'mxGeometry',{'x':str(60+c*(width+xgap)),
-            'y':str(80+r*(height+ygap)),'width':str(width),'height':str(height),'as':'geometry'})
-    for i,((a,b),number) in enumerate(graph.most_common(250)):
-        cell=ET.SubElement(group,'mxCell',{
-            'id':f'e{i+1000}','value':str(number),
-            'style':'edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;'
-                    'endFill=1;endSize=18;strokeWidth=2;strokeColor=#63758a;'
-                    'fontSize=13;labelBackgroundColor=#ffffff;',
-            'edge':'1','parent':'1','source':identifiers[a],'target':identifiers[b]})
-        ET.SubElement(cell,'mxGeometry',{'relative':'1','as':'geometry'})
-    destination.parent.mkdir(parents=True,exist_ok=True)
-    ET.ElementTree(root).write(destination,encoding='utf-8',xml_declaration=True)
-    return len(graph),max(0,len(modules)-len(top))
+        a, b = _module(edge['from']), _module(edge['to'])
+        if a != b and a in identifiers and b in identifiers:
+            graph[a, b] += 1
+    count = max(1, len(top))
+    columns = 4 if count > 8 else (3 if count > 3 else 2)
+    rows = max(1, math.ceil(count / columns))
+    box_w, box_h = 470, 145
+    gap_x, gap_y = 80, 75
+    left, top_pad = 60, 80
+    page_w = max(2200, left * 2 + columns * box_w + (columns - 1) * gap_x)
+    page_h = max(1800, top_pad * 2 + rows * box_h + (rows - 1) * gap_y)
+    root = ET.Element('mxfile', {'host': 'app.diagrams.net', 'type': 'device'})
+    diagram = ET.SubElement(root, 'diagram', {'id': 'architecture', 'name': 'Static module dependencies'})
+    model = ET.SubElement(diagram, 'mxGraphModel', {
+        'dx': '1400', 'dy': '900', 'grid': '1', 'gridSize': '10', 'page': '1',
+        'pageScale': '1', 'pageWidth': str(page_w), 'pageHeight': str(page_h)
+    })
+    group = ET.SubElement(model, 'root')
+    ET.SubElement(group, 'mxCell', {'id': '0'})
+    ET.SubElement(group, 'mxCell', {'id': '1', 'parent': '0'})
+    for i, (name, info) in enumerate(top):
+        c, r = i % columns, i // columns
+        label = f'{name}\n{info["count"]} files\n' + ', '.join(k + ':' + str(v) for k, v in info['types'].most_common(3))
+        cell = ET.SubElement(group, 'mxCell', {
+            'id': identifiers[name], 'value': label,
+            'style': 'rounded=1;whiteSpace=wrap;html=0;fillColor=#e8f0fb;strokeColor=#577398;'
+                     'align=center;verticalAlign=middle;fontSize=14;fontStyle=1;spacing=8;'
+                     'shadow=0;arcSize=10;',
+            'vertex': '1', 'parent': '1'
+        })
+        ET.SubElement(cell, 'mxGeometry', {
+            'x': str(left + c * (box_w + gap_x)), 'y': str(top_pad + r * (box_h + gap_y)),
+            'width': str(box_w), 'height': str(box_h), 'as': 'geometry'
+        })
+    for i, ((a, b), number) in enumerate(graph.most_common(250)):
+        cell = ET.SubElement(group, 'mxCell', {
+            'id': f'e{i+1000}', 'value': str(number),
+            'style': 'edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;'
+                     'endArrow=block;endFill=1;endSize=18;strokeWidth=2;strokeColor=#63758a;'
+                     'fontSize=13;labelBackgroundColor=#ffffff;',
+            'edge': '1', 'parent': '1', 'source': identifiers[a], 'target': identifiers[b]
+        })
+        ET.SubElement(cell, 'mxGeometry', {'relative': '1', 'as': 'geometry'})
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(root).write(destination, encoding='utf-8', xml_declaration=True)
+    return len(graph), max(0, len(modules) - len(top))
 
 
 def _source_inventory(root: Path):
-    """Cheap source-tree fingerprint using path, size and nanosecond mtime."""
+    """Cheap tree fingerprint; checks path, size and nanosecond mtime, not file contents."""
     inventory=[]
-    for rel,path in _scan(root):
+    for rel, path in _scan(root):
         try:
             st=path.stat()
             inventory.append([rel,st.st_size,st.st_mtime_ns])
@@ -151,6 +164,7 @@ def _middle_dir(destination: Path) -> Path:
     """Store machine-readable intermediate files separately from final reports."""
     middle = destination / 'middle-files'
     middle.mkdir(parents=True, exist_ok=True)
+    # Migrate v4.3 intermediates without discarding previously computed graph.
     for name in ('architecture.json', 'dependencies.csv', 'file_links.csv', 'module_summary.json'):
         legacy = destination / name
         updated = middle / name
@@ -164,6 +178,7 @@ def _middle_dir(destination: Path) -> Path:
     if old_cache.is_dir() and not new_cache.exists():
         old_cache.replace(new_cache)
     elif old_cache.is_dir():
+        # Merge existing caches without overwriting valid newer checkpoints.
         for file in old_cache.glob('*.json'):
             if not (new_cache / file.name).exists():
                 file.replace(new_cache / file.name)
@@ -175,7 +190,7 @@ def _middle_dir(destination: Path) -> Path:
 
 
 def load_architecture(repo: Repo, out: str | Path):
-    """Return generated graph only when project and source inventory still match."""
+    """Return a previously generated graph only if same project/source metadata."""
     path=_middle_dir(Path(out).expanduser().resolve())/'architecture.json'
     if not path.is_file():
         return None
@@ -201,14 +216,14 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
         if existing is not None and all((destination/name).is_file() for name in
                 ('architecture.md','architecture.drawio')) and all((middle/name).is_file() for name in
                 ('dependencies.csv','file_links.csv')):
-            if verbose:print('[Architecture] Source unchanged; reusing architecture.json',flush=True)
-            return {'files_scanned':existing['files_scanned'], 'modules':len(existing['modules']),
-                    'declared_dependencies':len(existing['dependencies']), 'file_links':len(existing['edges']),
-                    'architecture':str(destination/'architecture.md'),
-                    'drawio':str(destination/'architecture.drawio'),
-                    'json':str(middle/'architecture.json'),
-                    'links_csv':str(middle/'file_links.csv'),
-                    'dependencies_csv':str(middle/'dependencies.csv'), 'reused_graph':True}
+            if verbose: print('[Architecture] Source unchanged; reusing architecture.json',flush=True)
+            return {'files_scanned': existing['files_scanned'], 'modules':len(existing['modules']),
+                'declared_dependencies':len(existing['dependencies']), 'file_links':len(existing['edges']),
+                'architecture':str(destination/'architecture.md'),
+                'drawio':str(destination/'architecture.drawio'),
+                'json':str(middle/'architecture.json'),
+                'links_csv':str(middle/'file_links.csv'),
+                'dependencies_csv':str(middle/'dependencies.csv'), 'reused_graph':True}
     module_counts=defaultdict(lambda:{'count':0,'types':Counter()})
     records=[]; by_symbol=defaultdict(list); by_simple=defaultdict(list)
     raw_imports=[]; mapper_links=[]; xml_refs=[]; raw_type_refs=[]; dependencies=[]; tables=defaultdict(set)

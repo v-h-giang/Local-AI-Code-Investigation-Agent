@@ -21,8 +21,9 @@ class ModuleSummaryTests(unittest.TestCase):
             (root/'app'/'Order.java').write_text('package app;\n/** Handles order processing and validation. */\npublic class Order {}\n',encoding='utf-8')
             repo=Repo(root)
             out=Path(tmp)/'out'
-            export_architecture(repo, out, verbose=False)
-            data=collect_module_evidence(repo, load_architecture(repo, out))
+            export_architecture(repo,out,verbose=False)
+            graph=load_architecture(repo,out)
+            data=collect_module_evidence(repo,graph)
             self.assertEqual(data['app']['files'],1)
             self.assertTrue(any('Handles order processing' in c['text'] for c in data['app']['comments']))
             offline=summarize_modules(repo,out,verbose=False)

@@ -102,7 +102,8 @@ class OverviewTests(unittest.TestCase):
         destination=Path(self.tmp.name)/'overview'
         meta=export_overview(self.repo,destination,llm=FakeLLM(),verbose=False)
         self.assertTrue(Path(meta['ai_design']).is_file())
-        self.assertIn('OrderMapper.xml:4',Path(meta['ai_design']).read_text('utf-8'))
+        self.assertIn('backend/OrderMapper.xml',Path(meta['ai_design']).read_text('utf-8'))
+        self.assertTrue(any('OrderMapper.xml:4' in f.read_text('utf-8') for f in (destination/'analysis_files').glob('*.md')))
         self.assertEqual(meta['ai_files_analyzed'], 5)
         self.assertTrue((destination/'analysis_manifest.json').exists())
 

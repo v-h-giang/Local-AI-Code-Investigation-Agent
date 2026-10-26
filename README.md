@@ -1,26 +1,22 @@
-> **v4.8:** Draw.io FE/BE/DB lanes, framework columns, bigger arrows and clearer node spacing. See [README_V48.md](README_V48.md).
+**v4.13:** `architecture` generates a ranked list of up to 20 source-backed investigation prompts under Business Flows and Technical Architecture. Use `--auto-investigate-top N` for optional Qwen execution. See [README_V413.md](README_V413.md).
 
-**v4.6:** FE/BE framework reference diagrams only show roles backed by scanned source objects; missing roles are listed in the report. See [architecture guide](README_STACK_ARCHITECTURE.md).
+**v4.12:** Iterative, read-only Qwen tool investigation. See [README_V412.md](README_V412.md).
 
-**v4.5 FE/BE/DB architecture:** [read documentation](README_STACK_ARCHITECTURE.md).
+> **v4.9 Code Intelligence:** Incremental SQLite symbol/reference index, graph tracing, impact, evidence retrieval, Git history and optional local semantic embeddings. [Guide](README_CODE_INTELLIGENCE.md).
 
-> **v4.4:** `architecture --ai-summary` now removes the AI method column from Markdown and stores JSON/CSV/checkpoints in `middle-files/`. Existing v4.3 intermediate files are migrated automatically.
+> **v4.8:** Larger Draw.io arrows, left-to-right FE/BE/DB lanes, layer colors and framework-grouped reference diagrams. See [README_V48.md](README_V48.md).
 
-> **v4.3:** Module Summary uses the cached architecture graph, including inter-module links, source comment evidence, declared dependencies and SQL references. Reuses architecture.json when source metadata is unchanged; see [README_ARCHITECTURE.md](README_ARCHITECTURE.md).
+> **v4.6:** Reference Draw.io diagrams now show only framework roles matched to real source objects; each node includes source examples. Missing roles are listed separately in `stack_architecture.md`. See [README_STACK_ARCHITECTURE.md](README_STACK_ARCHITECTURE.md).
 
-> **v4.2 Module Summary:** `architecture` now also generates `module_summary.md` / `module_summary.json` using source comments, declarations and file references. Add `--ai-summary` to use the installed `qwen3:8b` for a concise evidence-based summary per module, with resumable cache. See [architecture guide](README_ARCHITECTURE.md).
+> **v4.5:** New FE/BE/DB framework detection, static object inventory, and editable observed/reference Draw.io diagrams. See [README_STACK_ARCHITECTURE.md](README_STACK_ARCHITECTURE.md).
 
-# Local AI Code Investigation Agent
+> **v4.4:** Main Module Summary table has no AI method column; intermediate architecture files, JSON/CSV and resumable cache are under `middle-files/`. See [README_ARCHITECTURE.md](README_ARCHITECTURE.md).
 
-**Current version: v4 — full repository scan, durable per-chunk checkpoints and restartable analysis.**
+> **v4.3:** `architecture --ai-summary` now reuses the validated `architecture.json` graph (imports, mapper refs, dependencies, SQL-table hints) and reads only selected comment/declaration source files for each module. [Architecture guide](README_ARCHITECTURE.md).
 
-See [v4 usage and recovery instructions](README_V4.md).
+> **Architecture-first (v4.1):** [Xem hướng dẫn khảo sát tĩnh không cần Ollama](README_ARCHITECTURE.md). Chạy `py -3 agent.py --project "D:\Work\LegacyProject" architecture` để tạo sơ đồ tổng thể trước khi phân tích chi tiết.
 
-**v4.1:** Fast architecture discovery without running Ollama or indexing: [Architecture-first guide](README_ARCHITECTURE.md).
-
-Run: `py -3 agent.py --project "D:\\Work\\LegacyProject" architecture --out "D:\\AgentOutput\\architecture"`.
-
----
+> **Phiên bản mới:** Xem [README_V4.md](README_V4.md) trước. Các ghi chú v2/v3 bên dưới là lịch sử và không còn phản ánh thiết lập mặc định `design`.
 
 # Quick start: automatic indexing
 
@@ -330,3 +326,42 @@ Trong chat, `/overview` chỉ quét tĩnh; `/design-all` thực hiện quy trìn
 ## Hiển thị RAM trong terminal
 
 Agent tự in `TotalRAM_GB`, `UsedRAM_GB`, `FreeRAM_GB` khi khởi động mọi lệnh (`chat`, `design`, `doctor`, ...). Không cần chạy PowerShell riêng hoặc cài thêm package. Trên Windows số liệu lấy từ `GlobalMemoryStatusEx`, gần với số liệu bộ nhớ vật lý của hệ điều hành và chỉ là ảnh chụp tại lúc bắt đầu; không phải bộ nhớ riêng của Ollama.
+
+## v4.10 — Qwen-guided investigation (local, 2048 context)
+
+`investigate` now uses a bounded two-stage pipeline:
+
+1. **Qwen plans** the user question as short structured JSON: investigation intent,
+   lexical search variations, likely symbols, and graph traversal depth.
+2. **Python investigates** using the existing local SQLite FTS5 index, exact symbol
+   definitions, and candidate static/caller edges. SQL parameters are bound; generated
+   plans cannot execute commands, write source, or select arbitrary file paths.
+3. **Qwen answers** in Vietnamese using the selected `file:line` excerpts and labeled
+   candidate graph edges. It is explicitly instructed not to claim unverified runtime
+   calls and to acknowledge missing evidence.
+
+First build the index:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" intelligence --out "D:\AgentOutput\architecture"
+```
+
+Then ask freely in Vietnamese or English:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" investigate "Chức năng xử lý đơn hàng nằm ở đâu?" --budget 900 --out "D:\AgentOutput\architecture"
+```
+
+Defaults remain `qwen3:8b` and `--num-ctx 2048`. The usual case uses **two
+local Qwen calls** (plan and grounded synthesis); if no relevant evidence exists,
+only one call is made. If the JSON plan is invalid, Python uses an explicit
+lexical fallback and exposes `planning_method=lexical-fallback` and
+`planning_error`. With `--non-ai`, `investigate` uses offline lexical FTS5 only
+retrieval and never contacts Ollama.
+
+**Limits:** This is a guided investigation, not full semantic Java LSP resolution.
+Name-based call edges, Flex remoting, SQL execution and behavior are not
+verified runtime flows. Qwen summaries may be inaccurate; validate their
+`file:line` claims against source. Source excerpts and index are local and
+should be treated as sensitive data. The `--budget` is an approximate excerpt
+token bound, not a guarantee of Ollama's complete conversation token count.

@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 import xml.etree.ElementTree as ET
+import math
 
 from codebase import Repo, MAX_FILES
 from exporter import toc, SQL_TABLE_RE
@@ -100,23 +101,32 @@ def survey(repo: Repo) -> dict:
 
 
 def _draw_overview(data: dict, out: Path, max_nodes: int = 28) -> dict:
-    """One editable node per top-level module, capped; no fictitious call arrows."""
+    """One editable node per top-level module, with clearer initial spacing."""
     groups = data['modules'][:max_nodes]
-    root = ET.Element('mxfile',{'host':'app.diagrams.net','type':'device'})
-    dia = ET.SubElement(root,'diagram',{'id':'overview','name':'Repository modules (static)'})
-    model = ET.SubElement(dia,'mxGraphModel',{'dx':'1100','dy':'800','grid':'1','gridSize':'10','page':'1','pageWidth':'1750','pageHeight':'1800'})
-    r = ET.SubElement(model,'root')
-    ET.SubElement(r,'mxCell',{'id':'0'});ET.SubElement(r,'mxCell',{'id':'1','parent':'0'})
+    count = max(1, len(groups))
+    columns = 3 if count <= 9 else 4
+    rows = max(1, math.ceil(count / columns))
+    box_w, box_h = 500, 130
+    gap_x, gap_y = 70, 55
+    left, top_pad = 70, 85
+    page_w = max(1750, left * 2 + columns * box_w + (columns - 1) * gap_x)
+    page_h = max(1800, top_pad * 2 + rows * box_h + (rows - 1) * gap_y)
+    root = ET.Element('mxfile', {'host': 'app.diagrams.net', 'type': 'device'})
+    dia = ET.SubElement(root, 'diagram', {'id': 'overview', 'name': 'Repository modules (static)'})
+    model = ET.SubElement(dia, 'mxGraphModel', {'dx': '1300', 'dy': '850', 'grid': '1', 'gridSize': '10', 'page': '1', 'pageWidth': str(page_w), 'pageHeight': str(page_h)})
+    r = ET.SubElement(model, 'root')
+    ET.SubElement(r, 'mxCell', {'id': '0'})
+    ET.SubElement(r, 'mxCell', {'id': '1', 'parent': '0'})
     for i, mod in enumerate(groups):
-        col, row = i%3, i//3
-        label = f"{mod['name']} ({mod['files']} files)\n" + ', '.join(f'{k}:{v}' for k,v in sorted(mod['technologies'].items()))
-        cell = ET.SubElement(r,'mxCell',{'id':f'm{i+2}','value':label,
-            'style':'rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf0ff;strokeColor=#42679f;fontSize=13;fontStyle=1;spacing=8;align=center;verticalAlign=middle;',
-            'vertex':'1','parent':'1'})
-        ET.SubElement(cell,'mxGeometry',{'x':str(70+col*540),'y':str(90+row*185),'width':'500','height':'130','as':'geometry'})
-    out.parent.mkdir(parents=True,exist_ok=True)
-    ET.ElementTree(root).write(out,encoding='utf-8',xml_declaration=True)
-    return {'diagram_modules':len(groups),'diagram_omitted_modules':max(0,len(data['modules'])-len(groups))}
+        col, row = i % columns, i // columns
+        label = f"{mod['name']} ({mod['files']} files)\n" + ', '.join(f'{k}:{v}' for k, v in sorted(mod['technologies'].items()))
+        cell = ET.SubElement(r, 'mxCell', {'id': f'm{i+2}', 'value': label,
+            'style': 'rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf0ff;strokeColor=#42679f;fontSize=13;align=center;verticalAlign=middle;fontStyle=1;spacing=8;',
+            'vertex': '1', 'parent': '1'})
+        ET.SubElement(cell, 'mxGeometry', {'x': str(left + col * (box_w + gap_x)), 'y': str(top_pad + row * (box_h + gap_y)), 'width': str(box_w), 'height': str(box_h), 'as': 'geometry'})
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(root).write(out, encoding='utf-8', xml_declaration=True)
+    return {'diagram_modules': len(groups), 'diagram_omitted_modules': max(0, len(data['modules']) - len(groups))}
 
 
 def _markdown(data: dict) -> str:

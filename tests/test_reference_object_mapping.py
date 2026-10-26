@@ -8,7 +8,7 @@ from codebase import Repo
 from stack_architecture import export_stack_architecture
 
 class ReferenceObjectTests(unittest.TestCase):
-    def test_reference_only_contains_real_objects_and_reports_missing_roles(self):
+    def test_reference_nodes_have_real_file_objects_and_missing_roles_are_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             src=Path(tmp)/'project'
             (src/'fe').mkdir(parents=True)

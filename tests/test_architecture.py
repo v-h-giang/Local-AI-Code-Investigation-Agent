@@ -14,7 +14,7 @@ class ArchitectureTests(unittest.TestCase):
             (root/'data'/'OrderMapper.java').write_text('package example;\npublic interface OrderMapper {}\n',encoding='utf-8')
             (root/'data'/'OrderMapper.xml').write_text('<mapper namespace="example.OrderMapper"><select id="list">select * from orders</select></mapper>',encoding='utf-8')
             out=Path(d)/'generated'; status=export_architecture(Repo(root),out,verbose=False)
-            payload=json.loads((out/'architecture.json').read_text('utf-8'))
+            payload=json.loads((out/'middle-files'/'architecture.json').read_text('utf-8'))
             self.assertEqual(status['files_scanned'],4)
             self.assertEqual(status['declared_dependencies'],1)
             self.assertTrue(any(x['kind']=='import' and x['confidence']=='exact' for x in payload['edges']))
