@@ -38,3 +38,11 @@ Nhận diện framework dùng khai báo thư viện và dấu hiệu cú pháp; 
 - [JDBC](https://docs.oracle.com/javase/tutorial/jdbc/basics/)
 
 Các chuẩn kiến trúc tham khảo không thay thế bằng chứng từ source của repository.
+
+## v4.6 — Reference nodes backed by source objects
+
+`frontend_reference.drawio` and `backend_reference.drawio` now draw an expected role **only when one or more scanned files match that role**. Each displayed node includes the number of matching source objects and up to three source paths. Reference arrows are dashed conceptual patterns **within the same detected framework**, never verified runtime calls.
+
+Roles without matching objects are not shown as `0 objects` nodes. Inspect the **Đối chiếu Reference với source** section of `stack_architecture.md` or `middle-files/stack_architecture.json` (`reference_role_coverage`) for the complete found/not_found inventory. A missing role means no file was matched by the current naming/annotation heuristics, not proof that the feature does not exist.
+
+No additional Ollama calls are required for FE/BE reference diagrams. Run `architecture` again to regenerate them.

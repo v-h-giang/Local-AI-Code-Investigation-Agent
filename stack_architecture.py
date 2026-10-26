@@ -69,6 +69,29 @@ def _role(path,source,layer):
     if layer=='DB':return 'SQL / Schema'
     return 'Unclassified source object'
 
+def _reference_matches(framework, expected_role, objects):
+    role=expected_role.lower()
+    categories=[]
+    if any(x in role for x in ('controller','endpoint','action / form')):categories=['Controller / Endpoint','Event / Controller']
+    elif any(x in role for x in ('repository','dao','mapper interface')):categories=['Repository / DAO / Mapper']
+    elif 'mapper xml' in role or 'annotation sql' in role:categories=['Mapper XML']
+    elif any(x in role for x in ('service','business rules','service / domain')):categories=['Service','Remote / Data Service']
+    elif any(x in role for x in ('view','component','mxml','facelets','jsp','ui ')):categories=['View / Screen','View / Component']
+    elif any(x in role for x in ('event handler','presenter')):categories=['Event / Controller']
+    elif any(x in role for x in ('entity','dto','model','domain','value object')):categories=['Entity / DTO / Domain','Model / Value Object']
+    elif any(x in role for x in ('configuration','injection','bootstrap','startup','application descriptor','data-source','datasource','sqlsession','persistence')):categories=['Configuration / Security']
+    elif 'remote' in role or 'proxy' in role:categories=['Remote / Data Service']
+    elif 'preparedstatement' in role or 'connection/' in role:categories=['Repository / DAO / Mapper']
+    matches=[]
+    for obj in objects:
+        if framework in ('Apache Flex','Adobe AIR') and obj['layer']!='FE':continue
+        if framework not in ('Apache Flex','Adobe AIR') and obj['layer'] not in ('BE','DB/BE'):continue
+        if any(k in obj['roles'] for k in categories):matches.append(obj['file'])
+        elif 'mapper xml' in role and obj['file'].lower().endswith('mapper.xml'):matches.append(obj['file'])
+        elif 'application descriptor' in role and obj['file'].lower().endswith('application.xml'):matches.append(obj['file'])
+    return sorted(set(matches))
+
+
 def _draw(destination,title,groups,links,reference=False):
     root=ET.Element('mxfile',{'host':'app.diagrams.net','type':'device'})
     diagram=ET.SubElement(root,'diagram',{'id':'stack','name':title})
@@ -76,15 +99,16 @@ def _draw(destination,title,groups,links,reference=False):
     r=ET.SubElement(model,'root')
     ET.SubElement(r,'mxCell',{'id':'0'});ET.SubElement(r,'mxCell',{'id':'1','parent':'0'})
     ids={}
-    for i,(key,count) in enumerate(list(groups.items())[:60]):
+    for i,(key,meta) in enumerate(list(groups.items())[:60]):
         ids[key]=f'n{i+2}'
-        cell=ET.SubElement(r,'mxCell',{'id':ids[key],'value':f'{key}\n{count} objects',
+        if isinstance(meta,dict):
+            label=meta.get('informational') or f'{key}\n{meta.get("count",0)} source objects'
+            if meta.get('examples'):label+='\n'+'\n'.join(meta['examples'][:3])
+        else:label=f'{key}\n{meta} objects'
+        cell=ET.SubElement(r,'mxCell',{'id':ids[key],'value':label,
             'style':'rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2fc;strokeColor=#52779a;',
             'vertex':'1','parent':'1'})
         ET.SubElement(cell,'mxGeometry',{'x':str(45+(i%4)*560),'y':str(65+(i//4)*210),'width':'490','height':'145','as':'geometry'})
-    if reference:
-        keys=list(ids)
-        links=Counter({(a,b):1 for a,b in zip(keys,keys[1:])})
     for i,((a,b),n) in enumerate(links.most_common(180)):
         if a not in ids or b not in ids or a==b:continue
         cell=ET.SubElement(r,'mxCell',{'id':f'e{i+1000}',
@@ -161,16 +185,30 @@ def export_stack_architecture(repo:Repo,out,graph=None,verbose=True):
     for layer,file in [('FE','frontend_architecture.drawio'),('BE','backend_architecture.drawio')]:
         groups=dict(roles[layer].most_common(28)) or {f'No confirmed {layer} source':0}
         _draw(dest/file,layer+' observed static architecture',groups,within[layer])
-        expected=[]
-        for name,info in frameworks.items():
-            if info['layer']==layer:
-                for role in info['expected_objects']:
-                    if role not in expected:expected.append(role)
-        ref=dict.fromkeys(expected[:24] or ['No detected framework — no reference model inferred'],0)
-        _draw(dest/('frontend_reference.drawio' if layer=='FE' else 'backend_reference.drawio'),
-              layer+' expected structure (NOT observed)',ref,Counter(),reference=True)
+    reference_coverage={}
+    for layer,filename in [('FE','frontend_reference.drawio'),('BE','backend_reference.drawio')]:
+        matched_nodes={};reference_edges=Counter()
+        for framework,info in frameworks.items():
+            if info['layer']!=layer:continue
+            found=[]
+            for expected in info['expected_objects']:
+                matches=_reference_matches(framework,expected,objects)
+                key=f'{framework}: {expected}'
+                reference_coverage[key]={'layer':layer,'framework':framework,
+                    'expected_role':expected,'objects':matches,'status':'found' if matches else 'not_found'}
+                if matches:
+                    matched_nodes[key]={'count':len(matches),'examples':matches[:3]}
+                    found.append(key)
+            for prev,current in zip(found,found[1:]):reference_edges[prev,current]=1
+        if matched_nodes:
+            _draw(dest/filename,layer+' reference grounded in scanned source',
+                  dict(list(matched_nodes.items())[:60]),reference_edges,reference=True)
+        else:
+            _draw(dest/filename,layer+' no matching source objects',
+                  {'No matching source objects':{'informational':'No framework reference roles mapped to source files'}},
+                  Counter())
     _draw(dest/'fe_be_architecture.drawio','Observed cross-layer static references',dict(layers),across)
-    result={'layers':dict(layers),'module_layers':{k:dict(v) for k,v in module_layers.items()},
+    result={'reference_role_coverage':reference_coverage,'layers':dict(layers),'module_layers':{k:dict(v) for k,v in module_layers.items()},
             'frameworks':frameworks,'databases':dbs,'objects':objects,
             'roles':{k:dict(v) for k,v in roles.items()},
             'cross_layer_static_edges':{f'{a} -> {b}':n for (a,b),n in across.items()},
@@ -203,6 +241,12 @@ def export_stack_architecture(repo:Repo,out,graph=None,verbose=True):
         report+=['',f'### {name} — Reference structure','','Expected pattern, not proof that source objects exist.','']
         report.extend('- '+x for x in item['expected_objects'])
         report.append('- Documentation: '+item['reference'])
+    report+=['','### Đối chiếu Reference với source','',
+             '| Framework | Vai trò tham khảo | Object tìm thấy | File minh họa |',
+             '|---|---|---:|---|']
+    for item in reference_coverage.values():
+        examples=', '.join(chr(96)+p+chr(96) for p in item['objects'][:2]) or 'Không tìm thấy trong source đã quét'
+        report.append(f'| {item["framework"]} | {item["expected_role"]} | {len(item["objects"])} | {examples} |')
     report+=['','## Sơ đồ','','- frontend_architecture.drawio / backend_architecture.drawio — observed static object roles.',
              '- fe_be_architecture.drawio — observed cross-layer references only.',
              '- frontend_reference.drawio / backend_reference.drawio — expected patterns drawn with dashed arrows.',

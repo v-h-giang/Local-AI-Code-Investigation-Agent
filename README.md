@@ -1,3 +1,5 @@
+**v4.6:** FE/BE framework reference diagrams only show roles backed by scanned source objects; missing roles are listed in the report. See [architecture guide](README_STACK_ARCHITECTURE.md).
+
 **v4.5 FE/BE/DB architecture:** [read documentation](README_STACK_ARCHITECTURE.md).
 
 > **v4.4:** `architecture --ai-summary` now removes the AI method column from Markdown and stores JSON/CSV/checkpoints in `middle-files/`. Existing v4.3 intermediate files are migrated automatically.
