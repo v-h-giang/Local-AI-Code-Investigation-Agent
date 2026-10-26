@@ -1,3 +1,5 @@
+> **v4.8:** Draw.io FE/BE/DB lanes, framework columns, bigger arrows and clearer node spacing. See [README_V48.md](README_V48.md).
+
 **v4.6:** FE/BE framework reference diagrams only show roles backed by scanned source objects; missing roles are listed in the report. See [architecture guide](README_STACK_ARCHITECTURE.md).
 
 **v4.5 FE/BE/DB architecture:** [read documentation](README_STACK_ARCHITECTURE.md).

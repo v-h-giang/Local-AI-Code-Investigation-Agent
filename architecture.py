@@ -92,37 +92,47 @@ def _extract_deps(path: str, text: str):
 
 
 def _format_drawio(modules, edges, destination: Path, node_cap=100):
-    """Draw.io top-level module graph; only draws links supported by identified references."""
-    top = sorted(modules.items(),key=lambda kv:(-kv[1]['count'],kv[0]))[:node_cap]
-    names = [x[0] for x in top]
-    identifiers = {name:f'm{i+2}' for i,name in enumerate(names)}
-    graph = Counter()
+    """Draw.io module graph with larger arrows and node spacing."""
+    top=sorted(modules.items(),key=lambda kv:(-kv[1]['count'],kv[0]))[:node_cap]
+    identifiers={name:f'm{i+2}' for i,(name,_) in enumerate(top)}
+    graph=Counter()
     for edge in edges:
-        a,b = _module(edge['from']), _module(edge['to'])
-        if a!=b and a in identifiers and b in identifiers:
-            graph[a,b]+=1
-    root = ET.Element('mxfile',{'host':'app.diagrams.net','type':'device'})
-    diagram = ET.SubElement(root,'diagram',{'id':'architecture','name':'Static module dependencies'})
-    model=ET.SubElement(diagram,'mxGraphModel',{'grid':'1','page':'1','pageScale':'1','pageWidth':'2800','pageHeight':'2400'})
+        a,b=_module(edge['from']),_module(edge['to'])
+        if a!=b and a in identifiers and b in identifiers:graph[a,b]+=1
+    columns=4 if len(top)>8 else (3 if len(top)>3 else 2)
+    rows=max(1,(len(top)+columns-1)//columns)
+    width,height=470,145
+    xgap,ygap=80,75
+    root=ET.Element('mxfile',{'host':'app.diagrams.net','type':'device'})
+    diagram=ET.SubElement(root,'diagram',{'id':'architecture','name':'Static module dependencies'})
+    model=ET.SubElement(diagram,'mxGraphModel',{
+        'grid':'1','page':'1','pageScale':'1',
+        'pageWidth':str(max(2200,120+columns*(width+xgap))),
+        'pageHeight':str(max(1800,160+rows*(height+ygap)))})
     group=ET.SubElement(model,'root')
     ET.SubElement(group,'mxCell',{'id':'0'})
     ET.SubElement(group,'mxCell',{'id':'1','parent':'0'})
-    for i,(name, info) in enumerate(top):
-        c,r=i%5,i//5
+    for i,(name,info) in enumerate(top):
+        c,r=i%columns,i//columns
         label=f'{name}\n{info["count"]} files\n'+', '.join(k+':'+str(v) for k,v in info['types'].most_common(3))
-        cell=ET.SubElement(group,'mxCell',{'id':identifiers[name],'value':label,
-             'style':'rounded=1;whiteSpace=wrap;html=0;fillColor=#e8f0fb;strokeColor=#577398;align=center;verticalAlign=middle;',
-             'vertex':'1','parent':'1'})
-        ET.SubElement(cell,'mxGeometry',{'x':str(50+c*510),'y':str(70+r*210),'width':'430','height':'120','as':'geometry'})
+        cell=ET.SubElement(group,'mxCell',{
+            'id':identifiers[name],'value':label,
+            'style':'rounded=1;whiteSpace=wrap;html=0;fillColor=#e8f0fb;strokeColor=#577398;'
+                    'align=center;verticalAlign=middle;fontSize=14;fontStyle=1;spacing=8;',
+            'vertex':'1','parent':'1'})
+        ET.SubElement(cell,'mxGeometry',{'x':str(60+c*(width+xgap)),
+            'y':str(80+r*(height+ygap)),'width':str(width),'height':str(height),'as':'geometry'})
     for i,((a,b),number) in enumerate(graph.most_common(250)):
-        cell=ET.SubElement(group,'mxCell',{'id':f'e{i+1000}', 'value':str(number),
-             'style':'endArrow=block;html=0;rounded=1;strokeColor=#7b8797;fontSize=11;',
-             'edge':'1','parent':'1','source':identifiers[a],'target':identifiers[b]})
+        cell=ET.SubElement(group,'mxCell',{
+            'id':f'e{i+1000}','value':str(number),
+            'style':'edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;'
+                    'endFill=1;endSize=18;strokeWidth=2;strokeColor=#63758a;'
+                    'fontSize=13;labelBackgroundColor=#ffffff;',
+            'edge':'1','parent':'1','source':identifiers[a],'target':identifiers[b]})
         ET.SubElement(cell,'mxGeometry',{'relative':'1','as':'geometry'})
     destination.parent.mkdir(parents=True,exist_ok=True)
     ET.ElementTree(root).write(destination,encoding='utf-8',xml_declaration=True)
     return len(graph),max(0,len(modules)-len(top))
-
 
 
 def _source_inventory(root: Path):

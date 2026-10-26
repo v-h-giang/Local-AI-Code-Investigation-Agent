@@ -87,13 +87,13 @@ def drawio(repo: Repo, paths: list[str], out: Path) -> dict:
         y = lane_count[lane]*95 + 80
         lane_count[lane] += 1
         cell = ET.SubElement(r,'mxCell', {'id':ident, 'value':label,
-            'style':f'rounded=1;whiteSpace=wrap;html=0;fillColor={bg};strokeColor={border};fontSize=12;align=center;verticalAlign=middle;',
+            'style':f'rounded=1;whiteSpace=wrap;html=0;fillColor={bg};strokeColor={border};fontSize=13;fontStyle=1;spacing=8;align=center;verticalAlign=middle;',
             'vertex':'1','parent':'1'})
-        ET.SubElement(cell,'mxGeometry', {'x':str(60+lane*460),'y':str(y),'width':'390','height':'65','as':'geometry'})
+        ET.SubElement(cell,'mxGeometry', {'x':str(60+lane*460),'y':str(y),'width':'430','height':'78','as':'geometry'})
     for i,(a,b,label) in enumerate(edges):
         if a not in idmap or b not in idmap: continue
         cell=ET.SubElement(r,'mxCell', {'id':'e'+str(i+2), 'value':label,
-            'style':'edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;endArrow=block;endFill=1;strokeColor=#7a7a7a;fontSize=10;',
+            'style':'edgeStyle=orthogonalEdgeStyle;rounded=1;html=0;endArrow=block;endFill=1;endSize=18;strokeWidth=2;strokeColor=#7a7a7a;fontSize=12;labelBackgroundColor=#ffffff;',
             'edge':'1','parent':'1','source':idmap[a],'target':idmap[b]})
         ET.SubElement(cell,'mxGeometry',{'relative':'1','as':'geometry'})
     out.parent.mkdir(parents=True,exist_ok=True)

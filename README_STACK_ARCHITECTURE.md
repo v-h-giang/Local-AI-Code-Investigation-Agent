@@ -46,3 +46,7 @@ Các chuẩn kiến trúc tham khảo không thay thế bằng chứng từ sour
 Roles without matching objects are not shown as `0 objects` nodes. Inspect the **Đối chiếu Reference với source** section of `stack_architecture.md` or `middle-files/stack_architecture.json` (`reference_role_coverage`) for the complete found/not_found inventory. A missing role means no file was matched by the current naming/annotation heuristics, not proof that the feature does not exist.
 
 No additional Ollama calls are required for FE/BE reference diagrams. Run `architecture` again to regenerate them.
+
+## v4.8 — Draw.io layout
+
+FE/BE/DB nodes use distinct colors and left-to-right lanes. Framework reference nodes are grouped in their own columns, and only source-backed roles appear. Larger connectors (`endSize=24`, `strokeWidth=3`) and orthogonal routing improve legibility. Reference edges remain dashed and conceptual; graph topology remains evidence-driven.

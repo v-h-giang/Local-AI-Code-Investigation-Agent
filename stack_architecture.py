@@ -92,31 +92,134 @@ def _reference_matches(framework, expected_role, objects):
     return sorted(set(matches))
 
 
-def _draw(destination,title,groups,links,reference=False):
-    root=ET.Element('mxfile',{'host':'app.diagrams.net','type':'device'})
-    diagram=ET.SubElement(root,'diagram',{'id':'stack','name':title})
-    model=ET.SubElement(diagram,'mxGraphModel',{'grid':'1','page':'1','pageWidth':'2400','pageHeight':'1900'})
-    r=ET.SubElement(model,'root')
-    ET.SubElement(r,'mxCell',{'id':'0'});ET.SubElement(r,'mxCell',{'id':'1','parent':'0'})
-    ids={}
-    for i,(key,meta) in enumerate(list(groups.items())[:60]):
-        ids[key]=f'n{i+2}'
-        if isinstance(meta,dict):
-            label=meta.get('informational') or f'{key}\n{meta.get("count",0)} source objects'
-            if meta.get('examples'):label+='\n'+'\n'.join(meta['examples'][:3])
-        else:label=f'{key}\n{meta} objects'
-        cell=ET.SubElement(r,'mxCell',{'id':ids[key],'value':label,
-            'style':'rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2fc;strokeColor=#52779a;',
-            'vertex':'1','parent':'1'})
-        ET.SubElement(cell,'mxGeometry',{'x':str(45+(i%4)*560),'y':str(65+(i//4)*210),'width':'490','height':'145','as':'geometry'})
-    for i,((a,b),n) in enumerate(links.most_common(180)):
-        if a not in ids or b not in ids or a==b:continue
-        cell=ET.SubElement(r,'mxCell',{'id':f'e{i+1000}',
-            'value':'Reference pattern (not observed)' if reference else f'{n} static refs',
-            'style':'endArrow=open;dashed=1;strokeColor=#999999;' if reference else 'endArrow=block;strokeColor=#52779a;',
-            'edge':'1','source':ids[a],'target':ids[b],'parent':'1'})
-        ET.SubElement(cell,'mxGeometry',{'relative':'1','as':'geometry'})
-    ET.ElementTree(root).write(destination,encoding='utf-8',xml_declaration=True)
+# Static architecture diagram colors: visual categories, not runtime claims.
+LAYER_COLORS = {
+    'FE': ('#fff0dc', '#b96c12'),
+    'BE': ('#e4f0ff', '#416eaa'),
+    'DB': ('#e2f3e7', '#3a8556'),
+    'SHARED': ('#eef0f3', '#7a8491'),
+}
+
+
+def _diagram_layer(name):
+    if name.startswith('FE') or name in ('Apache Flex', 'Adobe AIR'):
+        return 'FE'
+    if name.startswith('BE') or name in ('Spring MVC / Core', 'Spring Boot', 'MyBatis',
+                                        'Hibernate / JPA', 'Struts', 'JSF', 'JDBC'):
+        return 'BE'
+    if name.startswith('DB') or name in ('DB/BE',):
+        return 'DB'
+    return 'SHARED'
+
+
+def _ordered_components(groups, links, reference=False, lane_mode=False):
+    """A deterministic layout order; do not infer missing graph edges."""
+    names = list(groups)
+    if lane_mode:
+        return [(lane, [n for n in names if _diagram_layer(n) == lane])
+                for lane in ('FE', 'BE', 'DB', 'SHARED')]
+    if reference:
+        grouped = {}
+        for name in names:
+            framework = name.split(': ', 1)[0] if ': ' in name else '(Unmatched)'
+            grouped.setdefault(framework, []).append(name)
+        return list(grouped.items())
+    adjacency = defaultdict(Counter)
+    for (src, dst), weight in links.items():
+        if src in groups and dst in groups and src != dst:
+            adjacency[src][dst] += weight
+            adjacency[dst][src] += weight
+    ordered = []
+    remaining = set(names)
+    while remaining:
+        start = sorted(remaining, key=lambda n: (-sum(adjacency[n].values()), n))[0]
+        queue = [start]
+        while queue:
+            curr = queue.pop(0)
+            if curr not in remaining:
+                continue
+            remaining.remove(curr)
+            ordered.append(curr)
+            queue.extend(sorted((n for n in adjacency[curr] if n in remaining),
+                                key=lambda n: (-adjacency[curr][n], n)))
+    return [('Components', ordered)]
+
+
+def _draw(destination, title, groups, links, reference=False, lane_mode=False):
+    """Draw.io left-to-right lane/framework layout with larger, editable arrows."""
+    root = ET.Element('mxfile', {'host': 'app.diagrams.net', 'type': 'device'})
+    diagram = ET.SubElement(root, 'diagram', {'id': 'stack', 'name': title})
+    columns = [(heading, values) for heading, values in
+               _ordered_components(groups, links, reference=reference, lane_mode=lane_mode) if values]
+    if not columns:
+        columns = [('Unclassified', list(groups))]
+    box_w, box_h, gap_y = 470, 154, 54
+    lane_w, lane_gap, top = 520, 90, 150
+    max_rows = max(len(values) for _, values in columns)
+    page_w = max(1600, 100 + len(columns) * (lane_w + lane_gap))
+    page_h = max(1100, top + max_rows * (box_h + gap_y) + 90)
+    model = ET.SubElement(diagram, 'mxGraphModel', {
+        'dx': '1400', 'dy': '900', 'grid': '1', 'gridSize': '10', 'page': '1',
+        'pageWidth': str(page_w), 'pageHeight': str(page_h)
+    })
+    cells = ET.SubElement(model, 'root')
+    ET.SubElement(cells, 'mxCell', {'id': '0'})
+    ET.SubElement(cells, 'mxCell', {'id': '1', 'parent': '0'})
+    ids = {}
+    for col, (section, items) in enumerate(columns):
+        x = 60 + col * (lane_w + lane_gap)
+        layer = section if lane_mode else _diagram_layer(section)
+        fill, border = LAYER_COLORS.get(layer, LAYER_COLORS['SHARED'])
+        header = ET.SubElement(cells, 'mxCell', {
+            'id': f'group{col}', 'value': section,
+            'style': f'rounded=1;whiteSpace=wrap;html=0;fillColor={fill};strokeColor={border};'
+                     'fontSize=20;fontStyle=1;align=center;verticalAlign=middle;strokeWidth=2;',
+            'vertex': '1', 'parent': '1'
+        })
+        ET.SubElement(header, 'mxGeometry', {
+            'x': str(x), 'y': '46', 'width': str(box_w), 'height': '58', 'as': 'geometry'
+        })
+        for row, name in enumerate(items):
+            meta = groups[name]
+            ids[name] = f'n{len(ids)+2}'
+            if isinstance(meta, dict):
+                count = meta.get('count', 0)
+                examples = meta.get('examples', [])[:3]
+                label = meta.get('informational') or f'{name}\n{count} source objects'
+                if examples:
+                    label += '\n' + '\n'.join(examples)
+            else:
+                label = f'{name}\n{meta} objects'
+            node = ET.SubElement(cells, 'mxCell', {
+                'id': ids[name], 'value': label,
+                'style': f'rounded=1;whiteSpace=wrap;html=0;fillColor={fill};strokeColor={border};'
+                         'fontSize=14;fontStyle=1;align=center;verticalAlign=middle;spacing=10;'
+                         'strokeWidth=2;arcSize=10;',
+                'vertex': '1', 'parent': '1'
+            })
+            ET.SubElement(node, 'mxGeometry', {
+                'x': str(x), 'y': str(top + row * (box_h + gap_y)),
+                'width': str(box_w), 'height': str(box_h), 'as': 'geometry'
+            })
+    style = ('edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;'
+             'jettySize=auto;html=0;endArrow=block;endFill=1;endSize=24;'
+             'strokeWidth=3;strokeColor=#63758a;fontSize=14;'
+             'labelBackgroundColor=#ffffff;')
+    if reference:
+        style += 'dashed=1;dashPattern=8 5;strokeColor=#888888;'
+    for i, ((source, target), count) in enumerate(sorted(links.items(),
+                                key=lambda item: (-item[1], item[0]))[:180]):
+        if source not in ids or target not in ids or source == target:
+            continue
+        edge = ET.SubElement(cells, 'mxCell', {
+            'id': f'e{i+1000}',
+            'value': 'Reference only' if reference else f'{count} static refs',
+            'style': style, 'source': ids[source], 'target': ids[target],
+            'edge': '1', 'parent': '1'
+        })
+        ET.SubElement(edge, 'mxGeometry', {'relative': '1', 'as': 'geometry'})
+    ET.ElementTree(root).write(destination, encoding='utf-8', xml_declaration=True)
+
 
 def export_stack_architecture(repo:Repo,out,graph=None,verbose=True):
     """Identify FE/BE/DB and draw observed static vs conceptual reference structures."""
@@ -207,7 +310,7 @@ def export_stack_architecture(repo:Repo,out,graph=None,verbose=True):
             _draw(dest/filename,layer+' no matching source objects',
                   {'No matching source objects':{'informational':'No framework reference roles mapped to source files'}},
                   Counter())
-    _draw(dest/'fe_be_architecture.drawio','Observed cross-layer static references',dict(layers),across)
+    _draw(dest/'fe_be_architecture.drawio','Observed cross-layer static references',dict(layers),across,lane_mode=True)
     result={'reference_role_coverage':reference_coverage,'layers':dict(layers),'module_layers':{k:dict(v) for k,v in module_layers.items()},
             'frameworks':frameworks,'databases':dbs,'objects':objects,
             'roles':{k:dict(v) for k,v in roles.items()},
