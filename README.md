@@ -1,3 +1,5 @@
+> **v4.2 Module Summary:** `architecture` now also generates `module_summary.md` / `module_summary.json` using source comments, declarations and file references. Add `--ai-summary` to use the installed `qwen3:8b` for a concise evidence-based summary per module, with resumable cache. See [architecture guide](README_ARCHITECTURE.md).
+
 # Local AI Code Investigation Agent
 
 **Current version: v4 — full repository scan, durable per-chunk checkpoints and restartable analysis.**

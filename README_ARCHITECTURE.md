@@ -43,3 +43,25 @@ Các cạnh `exact` khớp full qualified class name; `candidate-name-only` ch�
 - Sơ đồ Draw.io giới hạn hiển thị 100 module lớn nhất để tránh vỡ bố cục; JSON/CSV vẫn lưu tất cả liên kết phát hiện.
 - Không đọc/chạy SQL, không sửa source.
 - Với monorepo nhiều phiên bản class trùng FQN, quan hệ mơ hồ được ghi vào `unresolved` trong JSON, không vẽ cạnh tùy tiện.
+
+## v4.2 — Module Summary
+
+Sau khi xây bản đồ liên kết, lệnh `architecture` tự thu thập một mẫu comment/Javadoc/AS3/MXML và khai báo class/method theo module cấp một, rồi tạo:
+
+- `module_summary.md`: vai trò tạm xác định và dẫn chứng `file:line`, có mục lục.
+- `module_summary.json`: dữ liệu comment, khai báo và kết quả tóm tắt của từng module.
+- `.module_summary_cache/`: cache kết quả AI khi dùng `--ai-summary`.
+
+Không cần Ollama:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --out "D:\AgentOutput\architecture"
+```
+
+Có Ollama và muốn thêm tóm tắt bằng Qwen3:8B:
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 architecture --ai-summary --out "D:\AgentOutput\architecture"
+```
+
+AI dùng các trích dẫn đại diện để phác thảo vai trò module, **không** xác minh toàn bộ runtime flow và không đọc toàn bộ source qua LLM. Module hiện dựa trên thư mục cấp một; comment có thể đã lỗi thời. Cache tái sử dụng nếu prompt, model, context không đổi.

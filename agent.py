@@ -24,6 +24,7 @@ def main(argv=None):
     sub.add_parser('index', help='Rebuild local SQLite FTS search index')
     s = sub.add_parser('architecture', help='Fast static architecture, libraries and file links (NO Ollama)')
     s.add_argument('--out', default='output/architecture', help='Output folder')
+    s.add_argument('--ai-summary', action='store_true', help='Summarize each module using local Ollama (optional)')
     s = sub.add_parser('search', help='Literal source search without AI')
     s.add_argument('query'); s.add_argument('--pattern', default='*'); s.add_argument('--limit', type=int,default=30)
     s = sub.add_parser('refs', help='Find symbol references without AI'); s.add_argument('symbol')
@@ -45,7 +46,11 @@ def main(argv=None):
         if a.command=='index': print(json.dumps(repo.index(),ensure_ascii=False,indent=2));return 0
         if a.command=='architecture':
             from architecture import export_architecture
-            print(json.dumps(export_architecture(repo,a.out),ensure_ascii=False,indent=2));return 0
+            from module_summary import summarize_modules
+            result = export_architecture(repo,a.out)
+            llm = Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx) if a.ai_summary else None
+            result.update(summarize_modules(repo,a.out,llm=llm))
+            print(json.dumps(result,ensure_ascii=False,indent=2));return 0
         if a.command=='search': print(repo.search_code(a.query, a.pattern, a.limit));return 0
         if a.command=='refs': print(repo.find_symbol(a.symbol));return 0
         if a.command=='read': print(repo.read_file(a.path,a.start,a.end));return 0
