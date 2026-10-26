@@ -41,7 +41,7 @@ class GraphSummaryTests(unittest.TestCase):
             self.assertIn('repository-declared, module use unverified',combined)
             self.assertIn('service/OrderService.java:2',combined)
             self.assertIn('SQL table: orders',combined)
-            evidence=json.loads((out/'module_summary.json').read_text(encoding='utf-8'))
+            evidence=json.loads((out/'middle-files'/'module_summary.json').read_text(encoding='utf-8'))
             self.assertEqual(evidence['modules']['service']['graph_context']['outgoing_total'],2)
             self.assertEqual(evidence['modules']['data']['graph_context']['incoming_total'],2)
             again=summarize_modules(repo,out,llm=llm,verbose=False)

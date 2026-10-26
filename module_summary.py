@@ -10,7 +10,7 @@ import os
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
-from architecture import _scan, _module, load_architecture
+from architecture import _scan, _module, load_architecture, _middle_dir
 from codebase import Repo
 
 COMMENT_START = re.compile(r'^\s*(?://|/\*+|\*|\*/|<!--|-->|#|--)\s?(.*)$')
@@ -168,13 +168,14 @@ def _predict_static(record):
 def summarize_modules(repo: Repo, out: str | Path, *, graph=None, llm=None, verbose=True):
     destination=Path(out).expanduser().resolve()
     destination.mkdir(parents=True,exist_ok=True)
+    middle=_middle_dir(destination)
     graph=graph or load_architecture(repo,destination)
     if graph is None:raise ValueError('architecture.json missing/stale; rerun architecture first')
     modules=collect_module_evidence(repo,graph)
     # Avoid dumping sensitive comments or full source in default Markdown;
     # selected short comments and declarations are still project-source-derived.
     summaries={};cached=0;failed=[]
-    cache=destination/'.module_summary_cache'
+    cache=middle/'.module_summary_cache'
     if llm is not None:cache.mkdir(exist_ok=True)
     for i,(name,record) in enumerate(modules.items(),1):
         description=_predict_static(record)
@@ -209,16 +210,16 @@ def summarize_modules(repo: Repo, out: str | Path, *, graph=None, llm=None, verb
                 failed.append({'module':name,'error':str(exc)[:250]});ai_status='failed-static-fallback'
         summaries[name]={'summary':description,'summary_method':ai_status,'evidence':record,
                          'graph_context':graph_context}
-    _atomic_json(destination/'module_summary.json',{'modules':summaries,'modules_count':len(modules),'ai_cached':cached,'ai_errors':failed})
+    _atomic_json(middle/'module_summary.json',{'modules':summaries,'modules_count':len(modules),'ai_cached':cached,'ai_errors':failed})
     lines=['# Module Summary — vai trò các module', '',
            '> Comment là mô tả của tác giả source, không phải bằng chứng xác minh hành vi runtime. ',
            '> Summary offline chỉ mô tả loại code, không đoán chức năng nghiệp vụ.', '',
            '## Mục lục', '', '- [Danh sách module](#danh-sách-module)',
            '- [Chi tiết và dẫn chứng](#chi-tiết-và-dẫn-chứng)', '- [Giới hạn](#giới-hạn)', '',
-           '## Danh sách module', '', '| Module | File | Vai trò tạm xác định | Phương pháp |', '|---|---:|---|---|']
+           '## Danh sách module', '', '| Module | File | Vai trò tạm xác định |', '|---|---:|---|']
     for name,item in summaries.items():
         desc=item['summary'].replace('\n',' ').replace('|','¦')[:180]
-        lines.append(f'| `{name}` | {item["evidence"]["files"]} | {desc} | {item["summary_method"]} |')
+        lines.append(f'| `{name}` | {item["evidence"]["files"]} | {desc} |')
     lines+=['','## Chi tiết và dẫn chứng','']
     for name,item in summaries.items():
         r=item['evidence'];lines += [f'### Module `{name}`','',item['summary'],'',
@@ -247,5 +248,5 @@ def summarize_modules(repo: Repo, out: str | Path, *, graph=None, llm=None, verb
     (destination/'module_summary.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     if verbose:print(f'[Module Summary] {len(modules)} modules; AI cached={cached}; AI errors={len(failed)}',flush=True)
     return {'modules_summarized':len(modules),'module_summary':str(destination/'module_summary.md'),
-            'module_summary_json':str(destination/'module_summary.json'), 'ai_cached':cached,'ai_errors':len(failed),
+            'module_summary_json':str(middle/'module_summary.json'), 'ai_cached':cached,'ai_errors':len(failed),
             'graph_reused_for_summary':True}

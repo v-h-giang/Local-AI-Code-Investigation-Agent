@@ -137,9 +137,36 @@ def _source_inventory(root: Path):
     return inventory
 
 
+def _middle_dir(destination: Path) -> Path:
+    """Store machine-readable intermediate files separately from final reports."""
+    middle = destination / 'middle-files'
+    middle.mkdir(parents=True, exist_ok=True)
+    for name in ('architecture.json', 'dependencies.csv', 'file_links.csv', 'module_summary.json'):
+        legacy = destination / name
+        updated = middle / name
+        if legacy.is_file():
+            if not updated.exists():
+                legacy.replace(updated)
+            else:
+                legacy.unlink()
+    old_cache = destination / '.module_summary_cache'
+    new_cache = middle / '.module_summary_cache'
+    if old_cache.is_dir() and not new_cache.exists():
+        old_cache.replace(new_cache)
+    elif old_cache.is_dir():
+        for file in old_cache.glob('*.json'):
+            if not (new_cache / file.name).exists():
+                file.replace(new_cache / file.name)
+        try:
+            old_cache.rmdir()
+        except OSError:
+            pass
+    return middle
+
+
 def load_architecture(repo: Repo, out: str | Path):
     """Return generated graph only when project and source inventory still match."""
-    path=Path(out).expanduser().resolve()/'architecture.json'
+    path=_middle_dir(Path(out).expanduser().resolve())/'architecture.json'
     if not path.is_file():
         return None
     try:
@@ -158,18 +185,20 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
     """Build fast static architecture. No index build, no AI calls."""
     destination=Path(out).expanduser().resolve()
     destination.mkdir(parents=True,exist_ok=True)
+    middle=_middle_dir(destination)
     if reuse:
         existing=load_architecture(repo,destination)
         if existing is not None and all((destination/name).is_file() for name in
-                ('architecture.md','architecture.drawio','dependencies.csv','file_links.csv')):
+                ('architecture.md','architecture.drawio')) and all((middle/name).is_file() for name in
+                ('dependencies.csv','file_links.csv')):
             if verbose:print('[Architecture] Source unchanged; reusing architecture.json',flush=True)
             return {'files_scanned':existing['files_scanned'], 'modules':len(existing['modules']),
                     'declared_dependencies':len(existing['dependencies']), 'file_links':len(existing['edges']),
                     'architecture':str(destination/'architecture.md'),
                     'drawio':str(destination/'architecture.drawio'),
-                    'json':str(destination/'architecture.json'),
-                    'links_csv':str(destination/'file_links.csv'),
-                    'dependencies_csv':str(destination/'dependencies.csv'), 'reused_graph':True}
+                    'json':str(middle/'architecture.json'),
+                    'links_csv':str(middle/'file_links.csv'),
+                    'dependencies_csv':str(middle/'dependencies.csv'), 'reused_graph':True}
     module_counts=defaultdict(lambda:{'count':0,'types':Counter()})
     records=[]; by_symbol=defaultdict(list); by_simple=defaultdict(list)
     raw_imports=[]; mapper_links=[]; xml_refs=[]; raw_type_refs=[]; dependencies=[]; tables=defaultdict(set)
@@ -252,10 +281,10 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
              'sql_tables':[{'name':n,'files':sorted(paths)} for n,paths in sorted(tables.items())],
              'read_errors':read_errors,
              'note':'Static heuristic inventory only. Imports do not establish runtime execution, and name-based matches are tentative.'}
-    (destination/'architecture.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8')
-    with (destination/'file_links.csv').open('w',encoding='utf-8-sig',newline='') as outcsv:
+    (middle/'architecture.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8')
+    with (middle/'file_links.csv').open('w',encoding='utf-8-sig',newline='') as outcsv:
         wr=csv.DictWriter(outcsv,fieldnames=['from','to','kind','line','symbol','confidence']);wr.writeheader();wr.writerows(edges)
-    with (destination/'dependencies.csv').open('w',encoding='utf-8-sig',newline='') as outcsv:
+    with (middle/'dependencies.csv').open('w',encoding='utf-8-sig',newline='') as outcsv:
         wr=csv.DictWriter(outcsv,fieldnames=['library','version','ecosystem','declared_in']);wr.writeheader();wr.writerows(dependencies)
     lines=['# Tổng quan kiến trúc repository', '',
            '> Khảo sát tĩnh, không gọi AI. Liên kết import không chứng minh luồng thực thi.', '',
@@ -279,7 +308,7 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
     lines+=['','### Các package import thường gặp (kể cả thư viện chưa được khai báo)','',
             '| Package | Số lần import |','|---|---:|']
     for pack,n in external_imports.most_common(60): lines.append(f'| `{pack}` | {n} |')
-    if len(dependencies)>500:lines.append(f'\n*Hiển thị 500/{len(dependencies)}; xem dependencies.csv để lấy đủ.*')
+    if len(dependencies)>500:lines.append(f'\n*Hiển thị 500/{len(dependencies)}; xem middle-files/dependencies.csv để lấy đủ.*')
     lines+=['','## Các module','','| Module | Số file | Loại file |','|---|---:|---|']
     for name,v in sorted(module_counts.items(),key=lambda x:-x[1]['count']):
         summary=', '.join(f'{k}: {n}' for k,n in v['types'].most_common(7))
@@ -287,7 +316,7 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
     lines+=['','## Liên kết file','','| File nguồn | File đích | Quan hệ | Độ tin cậy |','|---|---|---|---|']
     for edge in edges[:250]:
         lines.append(f'| `{edge["from"]}:{edge["line"]}` | `{edge["to"]}` | {edge["kind"]} | {edge["confidence"]} |')
-    if len(edges)>250:lines.append(f'\n*Hiển thị 250/{len(edges)}; xem file_links.csv và architecture.json để lấy đủ.*')
+    if len(edges)>250:lines.append(f'\n*Hiển thị 250/{len(edges)}; xem middle-files/file_links.csv và middle-files/architecture.json để lấy đủ.*')
     lines+=['','## Giới hạn','',
             '- Thu thập import Java/ActionScript, mapper namespace, class-reference XML và dependency được khai báo trong Maven/Gradle/Ivy/Ant (một phần).',
             '- MXML event binding, runtime reflection, dependency injection, SQL động và kết nối qua HTTP chưa được truy vết đầy đủ.',
@@ -298,8 +327,8 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
     (destination/'architecture.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     result={'files_scanned':len(records),'modules':len(module_counts),'declared_dependencies':len(dependencies),
             'file_links':len(edges),'architecture':str(destination/'architecture.md'),
-            'drawio':str(destination/'architecture.drawio'),'json':str(destination/'architecture.json'),
-            'links_csv':str(destination/'file_links.csv'),'dependencies_csv':str(destination/'dependencies.csv'),
+            'drawio':str(destination/'architecture.drawio'),'json':str(middle/'architecture.json'),
+            'links_csv':str(middle/'file_links.csv'),'dependencies_csv':str(middle/'dependencies.csv'),
             'reused_graph':False}
     if verbose:print(f'[Architecture] Done: {len(records)} files, {len(dependencies)} dependencies, {len(edges)} file links.',flush=True)
     return result

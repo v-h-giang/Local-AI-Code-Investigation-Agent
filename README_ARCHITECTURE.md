@@ -85,3 +85,22 @@ Kết quả `module_summary.md` và `module_summary.json` có thêm `graph_conte
 AI cache tại `.module_summary_cache` vẫn dùng hash của prompt/model/context. Khi đầu vào không đổi, lượt chạy sau không gọi lại AI cho module đã có kết quả.
 
 **Giới hạn:** module vẫn dựa theo thư mục cấp 1; parsing mang tính heuristic, không xác minh runtime graph; chỉ đưa mẫu bằng chứng vào Qwen, không đọc toàn bộ source qua model.
+
+## v4.4 — Clean output layout
+
+The generated reports `architecture.md`, `architecture.drawio` and `module_summary.md` remain directly in the output folder. Machine-readable intermediates are now under `middle-files/`:
+
+```text
+output/architecture/
+├── architecture.md
+├── architecture.drawio
+├── module_summary.md
+└── middle-files/
+    ├── architecture.json
+    ├── module_summary.json
+    ├── dependencies.csv
+    ├── file_links.csv
+    └── .module_summary_cache/
+```
+
+The main table of `module_summary.md` has only Module, File and Vai trò tạm xác định. Provenance and method metadata remain in `middle-files/module_summary.json`. Existing v4.3 JSON/CSV files and AI cache are migrated to `middle-files/` automatically without discarding valid checkpoints.
