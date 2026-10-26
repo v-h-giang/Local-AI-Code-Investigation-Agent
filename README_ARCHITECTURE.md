@@ -65,3 +65,23 @@ py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048
 ```
 
 AI dùng các trích dẫn đại diện để phác thảo vai trò module, **không** xác minh toàn bộ runtime flow và không đọc toàn bộ source qua LLM. Module hiện dựa trên thư mục cấp một; comment có thể đã lỗi thời. Cache tái sử dụng nếu prompt, model, context không đổi.
+
+## v4.3 — Graph → Module Evidence → AI Summary
+
+`architecture --ai-summary` sử dụng `architecture.json` đã tạo, thay vì quét lại mọi file source để tóm tắt module:
+
+1. **Architecture Graph:** file links (incoming, outgoing, internal), Maven/Gradle/Ivy dependencies, bảng SQL.
+2. **Module Evidence:** chọn tối đa 32 file tiêu biểu dựa trên số liên kết và tên file; lấy comment, Javadoc và khai báo có `path:line`.
+3. **AI Summary:** Qwen3:8b phân tích bằng chứng đã rút gọn trong context 2048. Các liên kết import chỉ là quan hệ tĩnh, không chứng minh runtime call.
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 architecture --ai-summary --out "D:\AgentOutput\architecture"
+```
+
+Trong lần chạy lại, agent tái sử dụng `architecture.json` nếu đường dẫn project và **path/size/mtime** của các file không đổi. Khi source thay đổi, agent tạo lại graph. Lưu ý metadata không phải hash nội dung mật mã; nếu thay đổi file mà giữ nguyên size/mtime, cần xóa `architecture.json` để quét mới.
+
+Kết quả `module_summary.md` và `module_summary.json` có thêm `graph_context`, liên kết module đi vào/đi ra, mức độ tin cậy, thư viện khai báo, SQL table và dẫn chứng. Thư viện khai báo tại root chỉ được ghi là *repository-declared, module use unverified*, không tự coi là dependency trực tiếp của từng module.
+
+AI cache tại `.module_summary_cache` vẫn dùng hash của prompt/model/context. Khi đầu vào không đổi, lượt chạy sau không gọi lại AI cho module đã có kết quả.
+
+**Giới hạn:** module vẫn dựa theo thư mục cấp 1; parsing mang tính heuristic, không xác minh runtime graph; chỉ đưa mẫu bằng chứng vào Qwen, không đọc toàn bộ source qua model.

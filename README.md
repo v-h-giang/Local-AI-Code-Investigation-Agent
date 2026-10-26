@@ -1,3 +1,5 @@
+> **v4.3:** Module Summary uses the cached architecture graph, including inter-module links, source comment evidence, declared dependencies and SQL references. Reuses architecture.json when source metadata is unchanged; see [README_ARCHITECTURE.md](README_ARCHITECTURE.md).
+
 > **v4.2 Module Summary:** `architecture` now also generates `module_summary.md` / `module_summary.json` using source comments, declarations and file references. Add `--ai-summary` to use the installed `qwen3:8b` for a concise evidence-based summary per module, with resumable cache. See [architecture guide](README_ARCHITECTURE.md).
 
 # Local AI Code Investigation Agent

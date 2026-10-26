@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from codebase import Repo
 from module_summary import collect_module_evidence, summarize_modules
+from architecture import export_architecture, load_architecture
 
 class FakeLLM:
     model='qwen3:8b'
@@ -20,7 +21,8 @@ class ModuleSummaryTests(unittest.TestCase):
             (root/'app'/'Order.java').write_text('package app;\n/** Handles order processing and validation. */\npublic class Order {}\n',encoding='utf-8')
             repo=Repo(root)
             out=Path(tmp)/'out'
-            data=collect_module_evidence(repo)
+            export_architecture(repo, out, verbose=False)
+            data=collect_module_evidence(repo, load_architecture(repo, out))
             self.assertEqual(data['app']['files'],1)
             self.assertTrue(any('Handles order processing' in c['text'] for c in data['app']['comments']))
             offline=summarize_modules(repo,out,verbose=False)

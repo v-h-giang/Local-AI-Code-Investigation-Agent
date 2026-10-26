@@ -124,10 +124,52 @@ def _format_drawio(modules, edges, destination: Path, node_cap=100):
     return len(graph),max(0,len(modules)-len(top))
 
 
-def export_architecture(repo: Repo, out: str | Path='output/architecture', verbose=True):
+
+def _source_inventory(root: Path):
+    """Cheap source-tree fingerprint using path, size and nanosecond mtime."""
+    inventory=[]
+    for rel,path in _scan(root):
+        try:
+            st=path.stat()
+            inventory.append([rel,st.st_size,st.st_mtime_ns])
+        except OSError:
+            inventory.append([rel,-1,-1])
+    return inventory
+
+
+def load_architecture(repo: Repo, out: str | Path):
+    """Return generated graph only when project and source inventory still match."""
+    path=Path(out).expanduser().resolve()/'architecture.json'
+    if not path.is_file():
+        return None
+    try:
+        graph=json.loads(path.read_text(encoding='utf-8'))
+        if (graph.get('architecture_version') == 43 and
+            graph.get('project') == str(repo.root) and
+            graph.get('source_inventory') == _source_inventory(repo.root)):
+            return graph
+    except (OSError,ValueError,KeyError):
+        pass
+    return None
+
+
+def export_architecture(repo: Repo, out: str | Path='output/architecture', verbose=True,
+                        reuse=True):
     """Build fast static architecture. No index build, no AI calls."""
     destination=Path(out).expanduser().resolve()
     destination.mkdir(parents=True,exist_ok=True)
+    if reuse:
+        existing=load_architecture(repo,destination)
+        if existing is not None and all((destination/name).is_file() for name in
+                ('architecture.md','architecture.drawio','dependencies.csv','file_links.csv')):
+            if verbose:print('[Architecture] Source unchanged; reusing architecture.json',flush=True)
+            return {'files_scanned':existing['files_scanned'], 'modules':len(existing['modules']),
+                    'declared_dependencies':len(existing['dependencies']), 'file_links':len(existing['edges']),
+                    'architecture':str(destination/'architecture.md'),
+                    'drawio':str(destination/'architecture.drawio'),
+                    'json':str(destination/'architecture.json'),
+                    'links_csv':str(destination/'file_links.csv'),
+                    'dependencies_csv':str(destination/'dependencies.csv'), 'reused_graph':True}
     module_counts=defaultdict(lambda:{'count':0,'types':Counter()})
     records=[]; by_symbol=defaultdict(list); by_simple=defaultdict(list)
     raw_imports=[]; mapper_links=[]; xml_refs=[]; raw_type_refs=[]; dependencies=[]; tables=defaultdict(set)
@@ -202,7 +244,9 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
     dep_unique={(x['library'],x['version'],x['ecosystem'],x['declared_in']):x for x in dependencies}
     dependencies=sorted(dep_unique.values(),key=lambda x:(x['ecosystem'],x['library'],x['declared_in']))
     diagram_count,omitted=_format_drawio(module_counts,edges,destination/'architecture.drawio')
-    payload={'project':str(repo.root),'files_scanned':len(records),'modules':module_json,
+    payload={'architecture_version':43,'project':str(repo.root),
+             'source_inventory':_source_inventory(repo.root),
+             'files_scanned':len(records),'modules':module_json,
              'dependencies':dependencies,'external_import_packages':external_imports.most_common(500),'edges':edges,
              'unresolved':[{'kind':k[0],'symbol':k[1],'count':n} for k,n in unresolved.most_common(500)],
              'sql_tables':[{'name':n,'files':sorted(paths)} for n,paths in sorted(tables.items())],
@@ -255,6 +299,7 @@ def export_architecture(repo: Repo, out: str | Path='output/architecture', verbo
     result={'files_scanned':len(records),'modules':len(module_counts),'declared_dependencies':len(dependencies),
             'file_links':len(edges),'architecture':str(destination/'architecture.md'),
             'drawio':str(destination/'architecture.drawio'),'json':str(destination/'architecture.json'),
-            'links_csv':str(destination/'file_links.csv'),'dependencies_csv':str(destination/'dependencies.csv')}
+            'links_csv':str(destination/'file_links.csv'),'dependencies_csv':str(destination/'dependencies.csv'),
+            'reused_graph':False}
     if verbose:print(f'[Architecture] Done: {len(records)} files, {len(dependencies)} dependencies, {len(edges)} file links.',flush=True)
     return result
