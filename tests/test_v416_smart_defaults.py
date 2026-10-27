@@ -78,6 +78,25 @@ class SmartDefaultsTest(unittest.TestCase):
         ranking = json.loads((self.out / 'middle-files' / 'suggested_investigations.json').read_text('utf-8'))
         self.assertNotEqual(ranking['ranking_method'], 'local-qwen-reviewed')
 
+    def test_max_keyword_investigates_all_generated_questions(self):
+        status, log = self.run_cli('--auto-investigate-top', 'max', '--non-synthesize')
+        self.assertEqual(status, 0, log[-800:])
+        manifest = json.loads((self.out / 'middle-files' / 'investigations' / 'manifest.json').read_text('utf-8'))
+        suggestions = json.loads((self.out / 'middle-files' / 'suggested_investigations.json').read_text('utf-8'))
+        self.assertEqual(manifest['requested'], 20)
+        self.assertEqual(manifest['executed'], len(suggestions['candidates']))
+        self.assertGreater(manifest['executed'], 0)
+        self.assertLessEqual(manifest['executed'], 20)
+        config = json.loads((self.out / 'middle-files' / 'workflow' / 'config.json').read_text('utf-8'))
+        self.assertEqual(config['auto_investigate_top'], 20)
+        self.assertEqual(config['max_llm_calls'], 370)
+
+    def test_max_keyword_is_case_insensitive(self):
+        status, log = self.run_cli('--auto-investigate-top', 'MAX', '--non-synthesize')
+        self.assertEqual(status, 0, log[-800:])
+        manifest = json.loads((self.out / 'middle-files' / 'investigations' / 'manifest.json').read_text('utf-8'))
+        self.assertEqual(manifest['requested'], 20)
+
     def test_legacy_n_and_explicit_budget_still_work(self):
         status, log = self.run_cli('--auto-investigate-top', '1', '--max-llm-calls', '60')
         self.assertEqual(status, 0, log[-800:])

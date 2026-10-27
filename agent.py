@@ -25,8 +25,9 @@ def main(argv=None):
     s = sub.add_parser('architecture', help='Static scan by default; --auto-investigate-top starts the full local Qwen workflow')
     s.add_argument('--out', default='output/architecture', help='Output folder')
     s.add_argument('--ai-summary', action='store_true', help='Summarize each module using local Ollama (optional)')
-    s.add_argument('--auto-investigate-top',type=int,nargs='?',const=5,default=0,metavar='N',
-                   help='Turn on the complete local workflow: Qwen ranking, top N investigations (default 5), and synthesis; 1-20')
+    s.add_argument('--auto-investigate-top',type=lambda value: 20 if value.lower() == 'max' else int(value),
+                   nargs='?',const=5,default=0,metavar='N|max',
+                   help='Complete local workflow: omit value for Top 5; use 1-20 or max for every generated question (up to 20)')
     s.add_argument('--ai-suggestions',action='store_true',help='Qwen ranks and critiques source-backed question candidates (also on with --auto-investigate-top)')
     s.add_argument('--non-ai-suggestions','--no-ai-suggestions',action='store_true',dest='no_ai_suggestions',
                    help='Skip local Qwen question ranking; use source-grounded deterministic ordering')
@@ -112,7 +113,7 @@ def main(argv=None):
         if a.non_synthesis_review or a.non_review:
             a.synthesis_review_rounds = 0
         if a.max_llm_calls is None:
-            a.max_llm_calls = 160 if a.auto_investigate_top > 0 else 80
+            a.max_llm_calls = (160 + max(0, a.auto_investigate_top - 5) * 14) if a.auto_investigate_top > 0 else 80
     print_ram_status()
     try:
         if a.command in ('architecture','investigate','synthesize') and not 1 <= a.max_llm_calls <= 5000:
@@ -123,7 +124,7 @@ def main(argv=None):
             # The user's explicit disable switch takes precedence.
             a.synthesize = False
         if a.command=='architecture' and (a.auto_investigate_top < 0 or a.auto_investigate_top > 20):
-            raise ValueError('--auto-investigate-top must be between 1 and 20, or omitted')
+            raise ValueError('--auto-investigate-top must be 1..20, max, or omitted')
         if a.command in ('architecture','investigate') and a.no_update_drawio and a.overwrite_drawio:
             raise ValueError('--overwrite-drawio cannot be combined with --no-update-drawio')
         repo = Repo(a.project)

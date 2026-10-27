@@ -10,6 +10,12 @@ Mở **PowerShell trong thư mục chứa `agent.py`**, thay đường dẫn pro
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --out "D:\AgentOutput\architecture"
 ```
 
+**Muốn chạy hết tất cả câu hỏi đã sinh (tối đa 20), thay `--auto-investigate-top` bằng `--auto-investigate-top max`:**
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --out "D:\AgentOutput\architecture"
+```
+
 **Lệnh này làm tất cả:** quét kiến trúc → tạo Draw.io → sinh tối đa 20 câu hỏi có bằng chứng → Qwen local xếp hạng → tự điều tra **Top 5** → tạo Markdown/SVG/Draw.io theo từng câu hỏi → tổng hợp báo cáo hệ thống. Mặc định có checkpoint, giới hạn lượt gọi Qwen và lưu file trung gian trong `middle-files/`.
 
 **Mở kết quả đầu tiên:** `D:\AgentOutput\architecture\system_knowledge_report.md` (tổng hợp), `suggested_investigations.md` (câu hỏi), `investigations\index.md` (các báo cáo điều tra) và `system_knowledge.drawio` (sơ đồ).
@@ -33,6 +39,14 @@ py -3 agent.py --project "D:\Work\LegacyProject" investigate "Nếu sửa saveOr
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 10 --out "D:\AgentOutput\architecture"
 ```
+
+**Chạy TẤT CẢ câu hỏi đã sinh (tối đa 20) trong một lần:**
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --out "D:\AgentOutput\architecture"
+```
+
+`max` nghĩa là điều tra toàn bộ các câu hỏi *thực sự được sinh ra* (nếu chỉ có 12 câu hợp lệ thì chạy 12, không tự tạo thêm). Con số **13** trong bản hotfix là **số lượt gọi Qwen để xếp hạng ứng viên**, không phải số câu hỏi. `max` vẫn bật Qwen review, Draw.io và báo cáo tổng hợp cuối. Việc chạy hết có thể tốn nhiều lượt gọi Ollama; giới hạn `--max-llm-calls` và cache/checkpoint vẫn có hiệu lực. Với `max`, ngân sách mặc định tăng từ 160 lên **370 lượt gọi Qwen** để giảm nguy cơ hết quota khi xử lý đủ 20 câu; bạn vẫn có thể chủ động điều chỉnh bằng `--max-llm-calls`.
 
 **4. Tự điều tra nhưng không tổng hợp cuối:**
 
@@ -61,7 +75,7 @@ py -3 agent.py --project "D:\Work\LegacyProject" synthesize --out "D:\AgentOutpu
 | `--non-diagram` | Không vẽ sơ đồ điều tra riêng |
 | `--non-update-drawio` | Không tạo Draw.io kiến trúc có chú thích |
 
-Mặc định `--auto-investigate-top` **không cần nhập số = Top 5**. Có thể chỉ định 1–20. Nếu chỉ gọi `investigate`, dùng `--non-ai` để tìm evidence mà không gọi Qwen. Các lệnh cần dùng chung `--out` để đọc đúng index và kết quả đã tạo.
+Mặc định `--auto-investigate-top` **không cần nhập số = Top 5**. Có thể chỉ định 1–20 hoặc `max` (chạy hết tối đa 20). Nếu chỉ gọi `investigate`, dùng `--non-ai` để tìm evidence mà không gọi Qwen. Các lệnh cần dùng chung `--out` để đọc đúng index và kết quả đã tạo.
 
 ### Đọc output ở đâu?
 
@@ -368,3 +382,8 @@ py -3 -m unittest discover -s tests -v
 - [Legacy v4 / Full Repository Scan](README_V4.md): các workflow `design`, `overview` và checkpoint lịch sử.
 
 > **README này là hướng dẫn sử dụng chính cho v4.14.** Các tài liệu theo phiên bản được giữ làm chi tiết kỹ thuật hoặc lịch sử thay đổi; khi ví dụ cũ xung đột với CLI hiện tại, ưu tiên `py -3 agent.py --help` và trợ giúp của từng lệnh.
+
+
+## v4.16.1 — Fix slow stage after FE/BE/DB diagrams
+
+The Code Intelligence index now uses indexed FTS rowid cleanup, skips unchanged graph resolution and prints progress; Qwen ranking second pass is focused on the strongest source-backed candidates. See [performance fix and diagnosis](README_V4161_PERFORMANCE.md). All intermediates remain in `middle-files/`.

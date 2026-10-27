@@ -21,7 +21,7 @@ The command with an explicit number still works:
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 10 --out "D:\AgentOutput\architecture"
 ```
 
-`N` may be 1–20; five is the default when the flag is supplied without a number. If the source provides fewer valid candidates, only those candidates are investigated. `architecture` **without** `--auto-investigate-top` remains a deterministic, non-AI scan with a maximum of 20 source-backed suggestions. The legacy `architecture --synthesize` and `architecture --ai-suggestions` options remain valid.
+`N` may be 1–20, or `max` to run every generated investigation (up to 20); five is the default when the flag is supplied without a number. If the source provides fewer valid candidates, only those candidates are investigated. `architecture` **without** `--auto-investigate-top` remains a deterministic, non-AI scan with a maximum of 20 source-backed suggestions. The legacy `architecture --synthesize` and `architecture --ai-suggestions` options remain valid.
 
 ## Disable individual steps with `--non-*`
 
@@ -69,3 +69,13 @@ Human-facing reports and editable diagrams remain in the output root and `invest
 The CLI JSON now includes `workflow_settings` for automatic investigation so the actual defaults/negative overrides are auditable. A failed investigation or incomplete synthesis remains visible; exit code 2 indicates a partial or unsuccessful automatic run. Checkpoints permit resuming. Citations and diagram edges refer to source-backed static evidence; they **do not prove runtime execution**.
 
 Tests use a mocked local model rather than a live benchmark on a large legacy repository. Protect the output directory as sensitive source-derived material and do not commit `middle-files/` to a repository.
+
+## Run every proposed investigation in one pass
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --out "D:\AgentOutput\architecture"
+```
+
+The hotfix limit of 13 refers to Qwen calls for ranking up to 40 candidates, **not 13 investigations**. `max` executes every source-backed question that was generated, up to the 20-question cap. If only 12 questions are available, only 12 are executed. Checkpoints remain in `middle-files/`.
+
+The `max` mode automatically raises the default Qwen call budget to 370, while `--max-llm-calls N` overrides that budget.

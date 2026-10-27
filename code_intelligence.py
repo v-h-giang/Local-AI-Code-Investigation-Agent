@@ -10,6 +10,8 @@ import json
 import re
 import sqlite3
 import subprocess
+import time
+from bisect import bisect_right
 from collections import Counter, defaultdict, deque
 from contextlib import closing
 from pathlib import Path
@@ -17,7 +19,7 @@ from typing import Optional
 from architecture import _scan, _module, load_architecture
 from codebase import Repo
 
-SCHEMA_VERSION = '49.1'
+SCHEMA_VERSION = '49.2'
 TYPE_RE = re.compile(r'\b(class|interface|enum|record)\s+([A-Za-z_$][\w$]*)')
 JAVA_METHOD = re.compile(r'\b(?:public|private|protected|static|final|synchronized|abstract|native|default|override|async|\s)+\s*(?:<[^>]+>\s*)?(?:[\w.$<>\[\],?]+\s+)?([A-Za-z_$][\w$]*)\s*\(([^;{}()]*)\)\s*(?:throws\s+[\w.,\s]+)?\s*(?:\{|;)',re.M)
 AS_METHOD = re.compile(r'\bfunction\s+([\w$]+)\s*\(([^()]*)\)')
@@ -48,21 +50,33 @@ def _setup(conn):
     CREATE INDEX IF NOT EXISTS symbols_file ON symbols(path);
     CREATE TABLE IF NOT EXISTS mentions (path TEXT, line INTEGER, name TEXT, context TEXT);
     CREATE INDEX IF NOT EXISTS mentions_name ON mentions(name);
+    CREATE INDEX IF NOT EXISTS mentions_path ON mentions(path);
     CREATE TABLE IF NOT EXISTS relations (src TEXT, dst TEXT, kind TEXT, path TEXT, line INTEGER, confidence TEXT, evidence TEXT,
         PRIMARY KEY (src,dst,kind,path,line));
     CREATE INDEX IF NOT EXISTS relations_src ON relations(src);
     CREATE INDEX IF NOT EXISTS relations_dst ON relations(dst);
+    CREATE INDEX IF NOT EXISTS relations_path ON relations(path);
     CREATE TABLE IF NOT EXISTS endpoints (path TEXT, line INTEGER, protocol TEXT, value TEXT);
+    CREATE INDEX IF NOT EXISTS endpoints_path ON endpoints(path);
     CREATE TABLE IF NOT EXISTS sql_tables (path TEXT, line INTEGER, table_name TEXT);
+    CREATE INDEX IF NOT EXISTS sql_tables_path ON sql_tables(path);
     CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(path UNINDEXED,line UNINDEXED,text,tokenize="unicode61");
+    -- FTS5's UNINDEXED path cannot support efficient DELETE WHERE path = ?.
+    -- A small rowid->path B-tree makes incremental removal proportional to one file,
+    -- rather than a full FTS scan for every file in a large legacy repository.
+    CREATE TABLE IF NOT EXISTS fts_row_paths (fts_rowid INTEGER PRIMARY KEY, path TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS fts_row_paths_path ON fts_row_paths(path);
     ''')
 
 
 def _clear_file(conn,path):
     if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'").fetchone():
         conn.execute('DELETE FROM embeddings WHERE symbol_id IN (SELECT id FROM symbols WHERE path=?)',(path,))
-    for table in ('symbols','mentions','relations','endpoints','sql_tables','search_fts'):
+    for table in ('symbols','mentions','relations','endpoints','sql_tables'):
         conn.execute(f'DELETE FROM {table} WHERE path=?',(path,))
+    # FTS5 rowid search is indexed; scanning its UNINDEXED path column is not.
+    conn.execute('DELETE FROM search_fts WHERE rowid IN (SELECT fts_rowid FROM fts_row_paths WHERE path=?)',(path,))
+    conn.execute('DELETE FROM fts_row_paths WHERE path=?',(path,))
 
 
 def _comments_or_strings(stripped):
@@ -114,8 +128,9 @@ def _index_file(conn,repo,path,source):
         if not clean:continue
         # Search evidence is line-based and capped for large repositories.
         if len(clean)>12 and not _comments_or_strings(clean):
-            conn.execute('INSERT INTO search_fts(path,line,text) VALUES (?,?,?)',
+            cur = conn.execute('INSERT INTO search_fts(path,line,text) VALUES (?,?,?)',
                          (path,i,SENSITIVE.sub(lambda m:m.group(1)+'=[REDACTED]',clean[:550])))
+            conn.execute('INSERT INTO fts_row_paths(fts_rowid,path) VALUES (?,?)',(cur.lastrowid,path))
         if _comments_or_strings(clean):continue
         if ext in ('.java','.as'):
             mt=TYPE_RE.search(line)
@@ -150,30 +165,37 @@ def _index_file(conn,repo,path,source):
 
 
 def _resolve(conn,architecture):
-    """Unique symbolic matches are plausible, not guaranteed Java overload dispatch."""
+    """Rebuild candidate call/architecture graph in O(mentions log methods/file).
+
+    Source method resolution is still lexical, not Java type/overload dispatch.
+    """
     conn.execute('DELETE FROM relations')
-    by_name=defaultdict(list)
+    # Pre-index only callable definitions of the *same language*; avoid scanning
+    # every overload/name candidate for each mention.
+    by_name_lang=defaultdict(list)
     for sid,path,line,name,kind in conn.execute('SELECT id,path,line,name,kind FROM symbols'):
-        by_name[name].append((sid,path,line,kind))
-    line_owner={}
+        if kind in ('method','function'):
+            by_name_lang[(name,Path(path).suffix.lower())].append((sid,path))
+    owners_by_file=defaultdict(lambda: ([],[]))
     for path,line,sid in conn.execute("SELECT path,line,id FROM symbols WHERE kind IN ('method','function') ORDER BY path,line"):
-        line_owner.setdefault(path,[]).append((line,sid))
+        lines,ids=owners_by_file[path]
+        lines.append(line)
+        ids.append(sid)
     call_candidates=0
     for path,line,name,context in conn.execute('SELECT path,line,name,context FROM mentions'):
-        owners=line_owner.get(path,[])
-        src=next((sid for ln,sid in reversed(owners) if ln<=line),None)
-        if not src:continue
-        matches=[d for d in by_name.get(name,[]) if d[3] in ('method','function') and d[0]!=src]
-        # Java→ActionScript calls are not established by matching names.
-        language=Path(path).suffix.lower()
-        matches=[d for d in matches if Path(d[1]).suffix.lower()==language]
-        if len(matches)==1:
-            dest=matches[0][0]
-            # Same-file method calls are likely but still not proven without type checking.
-            conf='same-file-candidate' if matches[0][1]==path else 'name-only-candidate'
-            conn.execute('INSERT OR IGNORE INTO relations VALUES (?,?,?,?,?,?,?)',
-                         (src,dest,'calls-candidate',path,line,conf,f'{path}:{line}'))
-            call_candidates+=1
+        lines,ids=owners_by_file.get(path,([],[]))
+        idx=bisect_right(lines,line)-1
+        if idx<0:continue
+        src=ids[idx]
+        matches=[item for item in by_name_lang.get((name,Path(path).suffix.lower()),[]) if item[0]!=src]
+        # A unique different target is a candidate; ambiguous overloaded calls
+        # must NOT be resolved from lexical spelling alone.
+        if len(matches)!=1:continue
+        dest,dest_path=matches[0]
+        conf='same-file-candidate' if dest_path==path else 'name-only-candidate'
+        conn.execute('INSERT OR IGNORE INTO relations VALUES (?,?,?,?,?,?,?)',
+                     (src,dest,'calls-candidate',path,line,conf,f'{path}:{line}'))
+        call_candidates+=1
     if architecture:
         for edge in architecture.get('edges',[]):
             src=edge.get('from');dst=edge.get('to')
@@ -183,7 +205,6 @@ def _resolve(conn,architecture):
             conn.execute('INSERT OR IGNORE INTO relations VALUES (?,?,?,?,?,?,?)',
                          ('file:'+src,'file:'+dst,kind,src,line,edge.get('confidence','static'),f'{src}:{line}'))
     return call_candidates
-
 
 def build_intelligence(repo:Repo,out='output/architecture', *,verbose=True):
     """Per-file incremental index: retains other records and rebuilds resolved edges."""
@@ -203,12 +224,19 @@ def build_intelligence(repo:Repo,out='output/architecture', *,verbose=True):
             except OSError:pass
     fingerprints={p:f'{size}:{mtime}' for p,size,mtime in inventory}
     changed=0;deleted=0;errors=[]
+    started=time.monotonic()
+    if verbose:
+        print(f'[Intelligence] Indexing {len(fingerprints)} source files; SQLite: {target}',flush=True)
+    last_progress=started
     with sqlite3.connect(target) as conn:
         _setup(conn)
         version=conn.execute("SELECT value FROM meta WHERE key='version'").fetchone()
-        if not version or version[0]!=SCHEMA_VERSION:
-            for tab in ('files','symbols','mentions','relations','endpoints','sql_tables','search_fts'):
+        new_schema=(not version or version[0]!=SCHEMA_VERSION)
+        if new_schema:
+            if verbose:print('[Intelligence] Schema updated; rebuilding intelligence index once.',flush=True)
+            for tab in ('files','symbols','mentions','relations','endpoints','sql_tables','search_fts','fts_row_paths'):
                 conn.execute(f'DELETE FROM {tab}')
+            conn.execute("DELETE FROM meta WHERE key='relations_arch_signature'")
             conn.execute("INSERT OR REPLACE INTO meta VALUES ('version',?)",(SCHEMA_VERSION,))
         old=dict(conn.execute('SELECT path,signature FROM files'))
         for path in set(old)-set(fingerprints):
@@ -219,20 +247,36 @@ def build_intelligence(repo:Repo,out='output/architecture', *,verbose=True):
                 source=repo._read(repo._safe(path))
             except (OSError,ValueError) as exc:
                 errors.append(f'{path}: {exc}');continue
-            _clear_file(conn,path)
+            if path in old:
+                _clear_file(conn,path)
             _index_file(conn,repo,path,source)
             conn.execute('INSERT OR REPLACE INTO files VALUES (?,?,?,?)',(path,sign,_module(path),Path(path).suffix.lower()))
             changed+=1
-            if verbose and i%500==0:print(f'[Intelligence] {i}/{len(fingerprints)} source files checked',flush=True)
-        calls=_resolve(conn,architecture)
+            if verbose and (i%250==0 or time.monotonic()-last_progress>8):
+                print(f'[Intelligence] {i}/{len(fingerprints)} checked; {changed} changed; elapsed {time.monotonic()-started:.1f}s',flush=True)
+                last_progress=time.monotonic()
+        # Even an unchanged graph was previously rebuilt from every mention.
+        # Cache the architecture-edge signature, since 'intelligence' may run
+        # before 'architecture' and needs to add file links on a later run.
+        architecture_sig=hashlib.sha256(json.dumps(architecture.get('edges',[]) if architecture else [],
+            sort_keys=True,ensure_ascii=False).encode('utf-8')).hexdigest()
+        saved_sig=conn.execute("SELECT value FROM meta WHERE key='relations_arch_signature'").fetchone()
+        rebuild_graph=bool(changed or deleted or new_schema or not saved_sig or saved_sig[0]!=architecture_sig)
+        if rebuild_graph:
+            if verbose:print('[Intelligence] Resolving static call graph...',flush=True)
+            calls=_resolve(conn,architecture)
+            conn.execute("INSERT OR REPLACE INTO meta VALUES ('relations_arch_signature',?)",(architecture_sig,))
+        else:
+            calls=conn.execute("SELECT COUNT(*) FROM relations WHERE kind='calls-candidate'").fetchone()[0]
+            if verbose:print('[Intelligence] Unchanged source and graph; reusing resolved edges.',flush=True)
         conn.commit()
         symbols=conn.execute('SELECT COUNT(*) FROM symbols').fetchone()[0]
         relations=conn.execute('SELECT COUNT(*) FROM relations').fetchone()[0]
     result={'index':str(target),'files':len(fingerprints),'changed_files':changed,'deleted_files':deleted,
             'symbols':symbols,'relations':relations,'call_candidates':calls,'read_errors':errors[:25],
             'parser':'optional-tree-sitter-when-installed + lexical fallback',
-            'full_ast':False,'tree_sitter_optional':True}
-    if verbose:print(f'[Intelligence] {symbols} symbols, {relations} relations, {changed} changed files.',flush=True)
+            'full_ast':False,'tree_sitter_optional':True,'graph_rebuilt':rebuild_graph}
+    if verbose:print(f'[Intelligence] Complete: {symbols} symbols, {relations} relations, {changed} changed files, {time.monotonic()-started:.1f}s.',flush=True)
     return result
 
 

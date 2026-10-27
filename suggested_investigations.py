@@ -42,10 +42,31 @@ def _qwen_rank_candidates(llm, pool, rounds=2):
     """
     rounds = max(1, min(int(rounds), 3))
     journal = []
+    # Pass 1 scores every source-backed candidate. Subsequent passes critique
+    # only the leading candidates in EACH group; 40 items/2 passes now require
+    # at most 13 instead of 20 model calls, while preserving diversity.
+    def review_set(pass_num):
+        if pass_num == 0 or len(pool) <= 8:
+            return pool
+        limit=min(len(pool),12)
+        selected=[]
+        for group in GROUPS:
+            group_items=sorted((x for x in pool if x['group']==group),
+                               key=lambda x:(-x['score'],x['candidate_id']))
+            selected.extend(group_items[:limit//2])
+        ids={x['candidate_id'] for x in selected}
+        remainder=sorted((x for x in pool if x['candidate_id'] not in ids),
+                         key=lambda x:(-x['score'],x['candidate_id']))
+        selected.extend(remainder[:max(0,limit-len(selected))])
+        return selected[:limit]
+    max_calls=sum((len(review_set(i))+3)//4 for i in range(rounds))
+    print(f'[Suggestions] Qwen ranking: {len(pool)} grounded candidates, {rounds} pass(es), '
+          f'up to {max_calls} local Ollama calls.',flush=True)
     # Keep individual batches tiny for machines using num_ctx=2048.
     for pass_num in range(rounds):
-        for start in range(0, len(pool), 4):
-            batch = pool[start:start+4]
+        active=review_set(pass_num)
+        for start in range(0, len(active), 4):
+            batch = active[start:start+4]
             ids = {x['candidate_id'] for x in batch}
             entries = [{'id':x['candidate_id'], 'group':x['group'],
                         'question':x['question'][:170], 'evidence':x['source_evidence'][0],
@@ -59,6 +80,8 @@ def _qwen_rank_candidates(llm, pool, rounds=2):
             prompt = ('Review pass '+str(pass_num+1)+'; source-backed candidates: '+
                       json.dumps(entries,ensure_ascii=False))
             try:
+                print(f'[Suggestions] AI ranking pass {pass_num+1}/{rounds}, '
+                      f'batch {start//4+1}/{(len(active)+3)//4}...',flush=True)
                 response = llm.call([{'role':'system','content':system},
                                      {'role':'user','content':prompt}],tools=False,num_predict=270)
                 parsed = json_object(response.get('content',''))
@@ -89,7 +112,9 @@ def suggest_investigations(repo, out='output/architecture', top=20, *, llm=None,
         raise ValueError('top must be between 1 and 100')
     dest = Path(out).expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
-    index = build_intelligence(repo, dest, verbose=False)
+    print('[Suggestions] Building/reusing source intelligence index...',flush=True)
+    index = build_intelligence(repo, dest, verbose=True)
+    print('[Suggestions] Collecting source-backed investigation candidates...',flush=True)
     candidates = []
     seen = set()
 
@@ -166,6 +191,7 @@ def suggest_investigations(repo, out='output/architecture', top=20, *, llm=None,
     candidates = balanced_pool[:pool_size]
     for i,item in enumerate(candidates,1):item['candidate_id']=f'CAND-{i:03d}'
     ranking_log = _qwen_rank_candidates(llm,candidates,ai_rounds) if llm is not None else []
+    print(f'[Suggestions] Ranking complete, selecting top {top}...',flush=True)
 
     # Stable priority order, but give both categories a reasonable share of results.
     per_group = {group: sorted((x for x in candidates if x['group'] == group),
