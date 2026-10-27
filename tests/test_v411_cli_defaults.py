@@ -16,7 +16,7 @@ class InvestigateDefaultsTest(unittest.TestCase):
             args = ['--project', str(root), 'investigate', 'What does OrderService do?', '--out', str(Path(tmp) / 'out')]
             captured = []
 
-            def fake_investigate(repo, question, llm=None, budget=1200, max_steps=4):
+            def fake_investigate(repo, question, llm=None, budget=1200, max_steps=4, review_rounds=1):
                 captured.append(llm)
                 return {'mode': 'ai' if llm is not None else 'non-ai'}
 
@@ -24,7 +24,7 @@ class InvestigateDefaultsTest(unittest.TestCase):
                     patch('code_intelligence.investigate', side_effect=fake_investigate), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(args), 0)
-                self.assertIs(captured[-1], fake_llm.return_value)
+                self.assertIs(captured[-1].llm, fake_llm.return_value)
                 fake_llm.assert_called_once()
                 self.assertEqual(main(args + ['--non-ai']), 0)
                 self.assertIsNone(captured[-1])

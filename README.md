@@ -1,76 +1,96 @@
-# Local AI Code Investigation Agent
+# Local AI Code Investigation Agent — v4.16
 
-**Phiên bản hiện tại: v4.14 · Python · Windows · Ollama cục bộ · Read-only đối với source**
+**Chạy hoàn toàn local · Python + Ollama · Windows · Không cần cloud AI · Read-only đối với source**
 
-Công cụ hỗ trợ **khảo sát kiến trúc và điều tra source code legacy** (Java, Adobe Flex/AIR, ActionScript, MXML, XML mapper, SQL). Agent kết hợp phân tích tĩnh, chỉ mục SQLite, graph quan hệ và **Qwen chạy qua Ollama trên máy của bạn** để tìm bằng chứng, truy vết các quan hệ ứng viên và trả lời câu hỏi bằng ngôn ngữ tự nhiên.
+## 🚀 MÌ ĂN LIỀN — 1 LỆNH CHÍNH
 
-> **Phạm vi độ tin cậy:** Agent không thực thi ứng dụng, không kết nối vào database nghiệp vụ và **không tạo được runtime call graph đã xác minh**. Những quan hệ suy ra từ tên, import hoặc cấu hình phải được xem là *static/heuristic candidates*, không phải chứng minh hành vi thực tế.
+Mở **PowerShell trong thư mục chứa `agent.py`**, thay đường dẫn project và output cho phù hợp:
 
-## Mục lục
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --out "D:\AgentOutput\architecture"
+```
 
-1. [Bắt đầu nhanh](#1-bắt-đầu-nhanh)
-2. [Yêu cầu và cài đặt](#2-yêu-cầu-và-cài-đặt)
-3. [Quy trình sử dụng khuyến nghị](#3-quy-trình-sử-dụng-khuyến-nghị)
-4. [Danh sách lệnh](#4-danh-sách-lệnh)
-5. [File đầu ra](#5-file-đầu-ra)
-6. [Agent điều tra như thế nào?](#6-agent-điều-tra-như-thế-nào)
-7. [Cấu hình, hiệu năng và lưu ý](#7-cấu-hình-hiệu-năng-và-lưu-ý)
-8. [Xử lý sự cố và kiểm thử](#8-xử-lý-sự-cố-và-kiểm-thử)
-9. [Tài liệu chuyên sâu](#9-tài-liệu-chuyên-sâu)
+**Lệnh này làm tất cả:** quét kiến trúc → tạo Draw.io → sinh tối đa 20 câu hỏi có bằng chứng → Qwen local xếp hạng → tự điều tra **Top 5** → tạo Markdown/SVG/Draw.io theo từng câu hỏi → tổng hợp báo cáo hệ thống. Mặc định có checkpoint, giới hạn lượt gọi Qwen và lưu file trung gian trong `middle-files/`.
 
-## 1. Bắt đầu nhanh
+**Mở kết quả đầu tiên:** `D:\AgentOutput\architecture\system_knowledge_report.md` (tổng hợp), `suggested_investigations.md` (câu hỏi), `investigations\index.md` (các báo cáo điều tra) và `system_knowledge.drawio` (sơ đồ).
 
-Mở **PowerShell** trong thư mục chứa `agent.py`. Thay `D:\Work\LegacyProject` bằng thư mục source thật và `D:\AgentOutput\architecture` bằng nơi bạn muốn lưu kết quả.
+### 5 lệnh thường dùng nhất
 
-### A. Tạo bản đồ kiến trúc và danh sách câu hỏi (không gọi Qwen)
+**1. Chỉ xem kiến trúc và 20 câu hỏi — không chạy AI:**
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --out "D:\AgentOutput\architecture"
 ```
 
-Lệnh này tự động:
-
-- Quét cấu trúc module, dependency, framework, FE/BE/DB và quan hệ tham chiếu tĩnh.
-- Tạo **Markdown + Draw.io** và bản tóm tắt từng module từ bằng chứng source.
-- Tạo/cập nhật **Code Intelligence Index** (`SQLite`) dùng lại cho những lần điều tra sau.
-- Sinh **tối đa 20 câu hỏi điều tra có dẫn chứng**, chia đúng hai nhóm **Business Flows** và **Technical Architecture**. Có thể ít hơn 20 nếu source không đủ dấu hiệu.
-
-Mở file `D:\AgentOutput\architecture\suggested_investigations.md` để chọn chủ đề đáng điều tra.
-
-### B. Tự điều tra 5 câu hỏi có ưu tiên cao nhất bằng Qwen
+**2. Điều tra một câu hỏi bất kỳ — dùng Qwen local mặc định:**
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 5 --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" investigate "Nếu sửa saveOrder thì ảnh hưởng màn hình nào?" --out "D:\AgentOutput\architecture"
 ```
 
-`--auto-investigate-top N` nhận `1` đến `20`; **không có tùy chọn này thì không tự chạy điều tra bằng Qwen**. Mỗi câu hỏi được lưu riêng dưới `investigations/`; trạng thái và lỗi nằm trong `middle-files/investigations/manifest.json`. Danh sách câu hỏi được xếp hạng bằng heuristic, **không phải do Qwen chấm điểm**.
-
-### C. Hỏi một câu bất kỳ — Qwen được bật mặc định
+**3. Tự điều tra Top 10 thay vì Top 5:**
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" investigate "Nếu sửa saveOrder thì những màn hình nào có thể bị ảnh hưởng?" --max-steps 4 --budget 1200 --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 10 --out "D:\AgentOutput\architecture"
 ```
 
-Qwen lập kế hoạch → Python gọi các công cụ điều tra read-only → Qwen lựa chọn bước tiếp theo → tổng hợp bằng chứng `file:line` nếu tìm được.
-
-**Không dùng Qwen** (chỉ tìm evidence bằng Python/SQLite):
+**4. Tự điều tra nhưng không tổng hợp cuối:**
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" investigate "OrderService" --non-ai --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --non-synthesize --out "D:\AgentOutput\architecture"
 ```
 
-> `investigate --non-ai` là **lexical evidence retrieval**, không hiểu sâu mọi câu hỏi ngôn ngữ tự nhiên. Để dùng `investigate` hoặc các công cụ symbol/graph trên một output mới, chạy `architecture` hoặc `intelligence` trước với **cùng đường dẫn `--out`**.
+**5. Chỉ tổng hợp lại các tài liệu đã có:**
 
-### D. Đọc kết quả trực tiếp dưới dạng Markdown và Draw.io (v4.14)
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" synthesize --out "D:\AgentOutput\architecture"
+```
 
-`investigate` in **kết luận và đường dẫn báo cáo dễ đọc** ra terminal, thay vì in cả khối JSON dài. Mỗi câu hỏi có thư mục riêng trong `investigations/` chứa:
+> **Để chạy lệnh AI lần đầu:** cài [Ollama](https://ollama.com/download/windows), chạy `ollama pull qwen3:8b`. Kiểm tra với `py -3 agent.py --project ".\sample_project" doctor --probe`. Python 3.11+; không cần Node.js. Lệnh `architecture` không có `--auto-investigate-top` không gọi Qwen.
 
-- `result.md`: câu hỏi, kết luận, độ tin cậy, bằng chứng `file:line`, công cụ đã dùng và giới hạn.
-- `investigation.svg`: ảnh minh họa xem trực tiếp trong báo cáo Markdown.
-- `investigation.drawio`: các file liên quan được chia lane FE / BE / DB; **chỉ vẽ mũi tên nếu graph tĩnh thực sự có cạnh tương ứng**.
-- `architecture.investigated.drawio` và những sơ đồ quan sát khác: giữ nguyên bố cục gốc, tô nổi node liên quan và có note. Mặc định **không sửa `architecture.drawio` gốc**.
+### Muốn bỏ bước nào? Dùng `--non-*`
 
-Toàn bộ `result.json`, evidence CSV, manifest và registry highlight được đặt trong `middle-files/`. Với `architecture --auto-investigate-top N`, xem `investigations/index.md` để mở từng báo cáo bằng một click.
+| Cờ | Tác dụng |
+|---|---|
+| `--non-synthesize` | Bỏ tổng hợp cuối |
+| `--non-ai-suggestions` | Bỏ Qwen xếp hạng câu hỏi; vẫn sinh ứng viên dựa trên source |
+| `--non-review` | Bỏ các vòng phản biện bổ sung |
+| `--non-investigation-review` | Bỏ vòng review điều tra |
+| `--non-synthesis-review` | Bỏ vòng review báo cáo tổng hợp |
+| `--non-markdown` | Không tạo Markdown từng investigation |
+| `--non-diagram` | Không vẽ sơ đồ điều tra riêng |
+| `--non-update-drawio` | Không tạo Draw.io kiến trúc có chú thích |
+
+Mặc định `--auto-investigate-top` **không cần nhập số = Top 5**. Có thể chỉ định 1–20. Nếu chỉ gọi `investigate`, dùng `--non-ai` để tìm evidence mà không gọi Qwen. Các lệnh cần dùng chung `--out` để đọc đúng index và kết quả đã tạo.
+
+### Đọc output ở đâu?
+
+```text
+D:\AgentOutput\architecture\
+├── architecture.md / architecture.drawio
+├── suggested_investigations.md
+├── investigations\index.md
+├── investigations\INV-001\result.md
+├── investigations\INV-001\investigation.drawio / investigation.svg
+├── system_knowledge_report.md
+├── system_knowledge.drawio / system_knowledge.svg
+└── middle-files\           # JSON, SQLite, CSV, cache, checkpoint, logs
+```
+
+**Độ tin cậy:** quan hệ call/FE→BE→SQL suy ra từ phân tích tĩnh hoặc heuristic **không phải chứng minh runtime**. Kết luận không đủ bằng chứng phải được đánh dấu chưa xác minh. Dự án source không được gửi tới cloud AI.
+
+---
+
+## Mục lục hướng dẫn đầy đủ
+
+- [Cài đặt Windows](#2-yêu-cầu-và-cài-đặt)
+- [Workflow chi tiết](#3-quy-trình-sử-dụng-khuyến-nghị)
+- [Danh sách toàn bộ lệnh](#4-danh-sách-lệnh)
+- [File đầu ra](#5-file-đầu-ra)
+- [Cơ chế điều tra](#6-agent-điều-tra-như-thế-nào)
+- [Cấu hình và giới hạn](#7-cấu-hình-hiệu-năng-và-lưu-ý)
+- [Xử lý lỗi và test](#8-xử-lý-sự-cố-và-kiểm-thử)
+- [Tài liệu kỹ thuật](#9-tài-liệu-chuyên-sâu)
 
 ## 2. Yêu cầu và cài đặt
 
@@ -121,7 +141,7 @@ Lệnh thứ hai cần Ollama; lệnh đầu tiên không cần, trừ khi bật
 
 **Lần đầu:** `architecture` → đọc `architecture.md`, `module_summary.md`, `suggested_investigations.md` → chọn câu hỏi → chạy `investigate`.
 
-**Khi cần phân tích sâu:** tăng `--max-steps` (tối đa 6), giữ `--budget` phù hợp context; hoặc dùng `--auto-investigate-top N` để xử lý nhiều câu hỏi đã xếp hạng.
+**Khi cần phân tích sâu:** tăng `--max-steps` (tối đa 6), giữ `--budget` phù hợp context; hoặc dùng `--auto-investigate-top` để tự xếp hạng, điều tra Top 5 và tổng hợp toàn hệ thống. Nhập `N` sau cờ nếu muốn xử lý số lượng khác.
 
 **Khi source thay đổi:** chạy lại `architecture` hoặc `intelligence` để cập nhật chỉ mục. Index tăng dần dựa trên đường dẫn/kích thước/mtime; nếu nội dung thay đổi nhưng metadata vẫn giữ nguyên, có thể cần xóa index tương ứng và xây lại.
 
@@ -145,7 +165,7 @@ Các tùy chọn **chung** như `--project`, `--model`, `--host`, `--num-ctx`, `
 |---|---|---|
 | `architecture` | Quét kiến trúc, Draw.io, module summary, index và Top 20 suggestions | Không, trừ khi có flag AI |
 | `architecture --ai-summary` | Tóm tắt module với Qwen | Có |
-| `architecture --auto-investigate-top N` | Tự chạy N câu hỏi đã chọn | Có |
+| `architecture --auto-investigate-top [N]` | Xếp hạng, tự điều tra Top 5 (hoặc N), tự tổng hợp hệ thống | Có |
 | `intelligence` | Tạo/cập nhật SQLite index cho symbol, references, graph, SQL | Không |
 | `investigate "câu hỏi"` | Agent điều tra nhiều vòng có Qwen | **Có (mặc định)** |
 | `investigate "câu hỏi" --non-ai` | Chỉ tìm evidence bằng từ khóa/index | Không |
@@ -213,6 +233,9 @@ D:\AgentOutput\architecture\
 ├── backend_reference.drawio
 ├── backend_reference.investigated.drawio
 ├── suggested_investigations.md
+├── system_knowledge_report.md              # Tổng hợp sau auto-investigate-top
+├── system_knowledge.drawio
+├── system_knowledge.svg
 ├── investigations\
 │   ├── index.md                          # Tự sinh khi dùng --auto-investigate-top
 │   ├── INV-001\
@@ -235,6 +258,8 @@ D:\AgentOutput\architecture\
     │   ├── INV-001.evidence.csv
     │   └── manifest.json
     ├── drawio-baselines\                  # Chỉ khi dùng --overwrite-drawio
+    ├── workflow\                           # state, config, LLM-call audit, cache
+    ├── synthesis\                          # claim ledger, checkpoints, review logs
     └── .module_summary_cache\
 ```
 
@@ -242,15 +267,17 @@ File `.investigated.drawio` chỉ được tạo khi bản `.drawio` gốc tươ
 
 **Ý nghĩa màu sắc:** Box theo tầng FE/BE/DB; viền xanh là node liên quan đến bằng chứng; đầu mũi tên xanh chỉ xuất hiện nếu có **cạnh tĩnh đúng giữa các file được dẫn chứng**. Nét đứt trong Reference tiếp tục biểu thị cấu trúc tham khảo, không phải runtime call. Sơ đồ không tự nối FE → BE → SQL nếu thiếu bằng chứng quan hệ.
 
-**Các tùy chọn của `investigate` và `architecture --auto-investigate-top N`:**
+**Các tùy chọn giảm bớt của `investigate` và `architecture --auto-investigate-top [N]`:**
 
 | Cờ | Tác dụng |
 |---|---|
-| `--no-markdown` | Không tạo Markdown cho từng investigation (không ảnh hưởng `architecture.md`) |
-| `--no-diagram` | Không sinh `investigation.drawio` riêng |
-| `--no-update-drawio` | Không cập nhật bản `.investigated.drawio` |
+| `--non-markdown` (`--no-markdown`) | Không tạo Markdown cho từng investigation (không ảnh hưởng `architecture.md`) |
+| `--non-diagram` (`--no-diagram`) | Không sinh `investigation.drawio` riêng |
+| `--non-update-drawio` (`--no-update-drawio`) | Không cập nhật bản `.investigated.drawio` |
 | `--diagram-type auto\|flow\|impact\|symbol` | Chọn hướng bố trí sơ đồ; không thay đổi các liên kết từ source |
 | `--overwrite-drawio` | Ghi đè `.drawio` gốc **chỉ khi chủ động yêu cầu**, backup ở `middle-files/drawio-baselines/` |
+
+Riêng `architecture --auto-investigate-top [N]`, có thêm `--non-synthesize`, `--non-ai-suggestions`, `--non-review`, `--non-investigation-review` và `--non-synthesis-review`. Xem [README_V416.md](README_V416.md).
 
 Mở Draw.io tại [diagrams.net](https://app.diagrams.net) → File → Open From → Device. Các file `.drawio` vẫn có thể chỉnh sửa từng node.
 
@@ -283,7 +310,7 @@ Question → Qwen investigation plan ───┤
 - **FE → BE → SQL:** có thể tìm dấu hiệu `RemoteObject`, Java class và mapper SQL, nhưng không chứng minh được endpoint mapping hay đường thực thi runtime.
 - **Retrieval:** SQLite FTS5/BM25, symbol và graph chọn một tập evidence có giới hạn; `--non-ai` chỉ trả retrieval, không suy luận nghiệp vụ.
 - **AI investigation:** Qwen được phép gọi các công cụ điều tra trong allowlist theo nhiều bước (mặc định 4, tối đa 6). Kết luận thiếu bằng chứng phải được ghi là chưa xác minh. Việc có `file:line` không tự động bảo đảm kết luận AI chính xác.
-- **Suggestions:** bộ xếp hạng heuristic xác định những câu hỏi có dấu hiệu source. `--auto-investigate-top` mới dùng Qwen để đi sâu vào các câu đó.
+- **Suggestions:** bộ xếp hạng heuristic xác định những câu hỏi có dấu hiệu source. `--auto-investigate-top` tự dùng Qwen để xếp hạng và điều tra Top 5, sau đó tổng hợp hệ thống.
 
 ## 7. Cấu hình, hiệu năng và lưu ý
 
@@ -302,7 +329,7 @@ Ví dụ đổi cấu hình:
 py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 --timeout 240 investigate "Giải thích logic lưu đơn hàng" --max-steps 4 --out "D:\AgentOutput\architecture"
 ```
 
-**Hiệu năng:** Quét và lập chỉ mục là xử lý nội bộ; các câu hỏi Qwen có thể cần nhiều lượt sinh nội dung. Với project lớn, nên chạy `architecture` trước, đọc suggestions và bắt đầu `--auto-investigate-top 1` hoặc `2` để kiểm tra chất lượng. Không nên coi Top 20 là 20 kết luận đã được xác minh.
+**Hiệu năng:** Quét và lập chỉ mục là xử lý nội bộ; các câu hỏi Qwen có thể cần nhiều lượt sinh nội dung. Với project lớn, mặc định Top 5 sẽ chạy nhiều lượt Ollama tuần tự; có thể thử `--auto-investigate-top 1` để kiểm tra chất lượng trước. Không nên coi Top 20 là 20 kết luận đã được xác minh.
 
 **Bảo mật:** Công cụ đọc source và ghi index/báo cáo bên ngoài source; Qwen không được cung cấp công cụ thực thi shell tùy ý, sửa source hay chạy SQL. Code, log, output và SQLite vẫn có thể chứa thông tin nhạy cảm — tránh commit hoặc chia sẻ các file được sinh từ dự án nội bộ. Ollama được ràng buộc kết nối HTTP localhost.
 
@@ -330,6 +357,8 @@ py -3 -m unittest discover -s tests -v
 ## 9. Tài liệu chuyên sâu
 
 - [v4.14 — Investigation Reports & Annotated Draw.io](README_V414.md): Markdown, sơ đồ chứng cứ, cập nhật kiến trúc và `middle-files/`.
+- [v4.16 — One-switch automatic workflow](README_V416.md): mặc định tốt nhất cho `--auto-investigate-top`, các tùy chọn `--non-*`.
+- [v4.15 — Local multi-loop workflow](README_V415.md): thiết kế nhiều vòng với Qwen local.
 - [v4.13 — Suggested Investigations](README_V413.md): Top 20, hai nhóm câu hỏi và `--auto-investigate-top`.
 - [v4.12 — Iterative Investigation](README_V412.md): Qwen chọn công cụ nhiều vòng, kiểm tra evidence.
 - [Code Intelligence](README_CODE_INTELLIGENCE.md): symbol, trace, impact, flows, history và vector search.

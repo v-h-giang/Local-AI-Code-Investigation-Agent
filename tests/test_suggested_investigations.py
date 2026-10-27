@@ -66,7 +66,7 @@ public class OrderController { public void submitOrder() { } }
                      'answer':'Evidence only', 'source_citations':['OrderService.java:1'],
                      'answer_status':'qwen-grounded-attempt'}) as run, \
                  redirect_stdout(io.StringIO()):
-                self.assertEqual(main(['--project',str(src),'architecture','--auto-investigate-top','2',
+                self.assertEqual(main(['--project',str(src),'architecture','--auto-investigate-top','2','--non-synthesize',
                                        '--out',str(root/'out')]),0)
             self.assertEqual(run.call_count,2)
             self.assertEqual(json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text())['executed'],2)

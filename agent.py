@@ -22,28 +22,50 @@ def main(argv=None):
     d = sub.add_parser('doctor', help='Verify Ollama and report source summary')
     d.add_argument('--probe', action='store_true', help='Actually load model and generate a tiny reply')
     sub.add_parser('index', help='Rebuild local SQLite FTS search index')
-    s = sub.add_parser('architecture', help='Fast static architecture, libraries and file links (NO Ollama)')
+    s = sub.add_parser('architecture', help='Static scan by default; --auto-investigate-top starts the full local Qwen workflow')
     s.add_argument('--out', default='output/architecture', help='Output folder')
     s.add_argument('--ai-summary', action='store_true', help='Summarize each module using local Ollama (optional)')
-    s.add_argument('--auto-investigate-top',type=int,default=0,metavar='N',help='Run the N highest-ranked suggested investigations with Qwen (1-20); default: disabled')
+    s.add_argument('--auto-investigate-top',type=int,nargs='?',const=5,default=0,metavar='N',
+                   help='Turn on the complete local workflow: Qwen ranking, top N investigations (default 5), and synthesis; 1-20')
+    s.add_argument('--ai-suggestions',action='store_true',help='Qwen ranks and critiques source-backed question candidates (also on with --auto-investigate-top)')
+    s.add_argument('--non-ai-suggestions','--no-ai-suggestions',action='store_true',dest='no_ai_suggestions',
+                   help='Skip local Qwen question ranking; use source-grounded deterministic ordering')
+    s.add_argument('--question-review-rounds',type=int,default=2,help='Local Qwen question ranking passes, 1-3 (default 2)')
+    s.add_argument('--investigation-review-rounds',type=int,default=1,help='Evidence critic passes per investigation, 0-2')
+    s.add_argument('--non-investigation-review',action='store_true',help='Skip extra Qwen evidence-review passes for investigations')
+    s.add_argument('--synthesize',action='store_true',help='Generate system report even without --auto-investigate-top (already on when auto investigation is enabled)')
+    s.add_argument('--non-synthesize','--non-synthesis',action='store_true',dest='non_synthesize',
+                   help='Skip final system-knowledge synthesis in the automatic workflow')
+    s.add_argument('--synthesis-review-rounds',type=int,default=2,help='System synthesis critic passes, 0-2')
+    s.add_argument('--non-synthesis-review',action='store_true',help='Skip Qwen critic passes during final synthesis')
+    s.add_argument('--non-review',action='store_true',help='Skip extra Qwen critique passes in question ranking, investigations and synthesis')
+    s.add_argument('--max-llm-calls',type=int,default=None,
+                   help='Hard local Ollama call limit; auto workflow default 160, otherwise 80')
     s = sub.add_parser('intelligence', help='Incrementally build symbol/call/search/SQL intelligence index')
     s.add_argument('--out', default='output/architecture')
     s = sub.add_parser('investigate', help='Investigate with local Qwen by default; --non-ai for retrieval only')
     s.add_argument('question'); s.add_argument('--budget',type=int,default=1200)
     s.add_argument('--max-steps',type=int,default=4,help='Maximum read-only tool investigation steps (1-6)')
+    s.add_argument('--review-rounds',type=int,default=1,help='Local Qwen evidence review passes (0-2)')
+    s.add_argument('--max-llm-calls',type=int,default=80,help='Hard limit for this investigation')
     s.add_argument('--non-ai',action='store_true',help='Disable Qwen and use local lexical evidence retrieval only')
     for command_name in ('architecture', 'investigate'):
         target = sub.choices[command_name]
-        target.add_argument('--no-markdown', action='store_true',
+        target.add_argument('--non-markdown', '--no-markdown', action='store_true', dest='no_markdown',
                             help='Skip Markdown output for individual investigations (not architecture.md)')
-        target.add_argument('--no-diagram', action='store_true',
+        target.add_argument('--non-diagram', '--no-diagram', action='store_true', dest='no_diagram',
                             help='Skip each individual investigation.drawio')
-        target.add_argument('--no-update-drawio', action='store_true',
+        target.add_argument('--non-update-drawio', '--no-update-drawio', action='store_true', dest='no_update_drawio',
                             help='Do not generate annotated versions of the architecture diagrams')
         target.add_argument('--overwrite-drawio', action='store_true',
                             help='Explicitly update original Draw.io files; backups in middle-files/drawio-baselines')
         target.add_argument('--diagram-type', choices=('auto', 'flow', 'impact', 'symbol'),
                             default='auto', help='Evidence-diagram type (never invents execution links)')
+    s = sub.add_parser('synthesize',help='Hierarchical local Qwen synthesis of architecture and prior investigations')
+    s.add_argument('--out',default='output/architecture',help='Existing architecture output folder')
+    s.add_argument('--review-rounds',type=int,default=2,help='Final local evidence-review passes (0-2)')
+    s.add_argument('--max-llm-calls',type=int,default=80,help='Hard limit for Ollama calls')
+    s.add_argument('--fresh',action='store_true',help='Ignore previous synthesis checkpoints')
     s = sub.add_parser('symbol',help='Symbol declarations and references from local intelligence index')
     s.add_argument('name')
     s = sub.add_parser('trace',help='Candidate caller-callee and static dependency graph')
@@ -78,8 +100,30 @@ def main(argv=None):
     s.add_argument('--topic',default=''); s.add_argument('--out',default=None)
     s.add_argument('--max-batches',type=int,default=None,help='Optional debug-only cap; default: no limit'); s.add_argument('--files-per-batch',type=int,choices=[1,2],default=1); s.add_argument('--no-resume',action='store_true')
     a = p.parse_args(argv)
+    # Automatic investigation is an opt-in switch, but once enabled it activates
+    # the complete recommended workflow without a long list of positive flags.
+    # A 'non-' flag always takes precedence over the corresponding default.
+    if a.command == 'architecture':
+        a.synthesize = (a.synthesize or a.auto_investigate_top > 0) and not a.non_synthesize
+        if a.non_review:
+            a.question_review_rounds = 1  # Still rank candidates once; skip ranking critique.
+        if a.non_investigation_review or a.non_review:
+            a.investigation_review_rounds = 0
+        if a.non_synthesis_review or a.non_review:
+            a.synthesis_review_rounds = 0
+        if a.max_llm_calls is None:
+            a.max_llm_calls = 160 if a.auto_investigate_top > 0 else 80
     print_ram_status()
     try:
+        if a.command in ('architecture','investigate','synthesize') and not 1 <= a.max_llm_calls <= 5000:
+            raise ValueError('--max-llm-calls must be 1..5000')
+        if a.command=='architecture' and a.ai_suggestions and a.no_ai_suggestions:
+            raise ValueError('--ai-suggestions conflicts with --non-ai-suggestions')
+        if a.command=='architecture' and a.synthesize and a.non_synthesize and a.auto_investigate_top == 0:
+            # The user's explicit disable switch takes precedence.
+            a.synthesize = False
+        if a.command=='architecture' and (a.auto_investigate_top < 0 or a.auto_investigate_top > 20):
+            raise ValueError('--auto-investigate-top must be between 1 and 20, or omitted')
         if a.command in ('architecture','investigate') and a.no_update_drawio and a.overwrite_drawio:
             raise ValueError('--overwrite-drawio cannot be combined with --no-update-drawio')
         repo = Repo(a.project)
@@ -88,26 +132,79 @@ def main(argv=None):
             from architecture import export_architecture
             from module_summary import summarize_modules
             result = export_architecture(repo,a.out)
-            llm = Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx) if a.ai_summary else None
-            result.update(summarize_modules(repo,a.out,llm=llm))
+            from local_workflow import WorkflowState, atomic_json
+            state=WorkflowState(a.out)
+            state.record('architecture','completed',files=result.get('files_scanned'))
+            if a.auto_investigate_top:
+                workflow_settings={
+                    'auto_investigate_top':a.auto_investigate_top,
+                    'local_ai_question_ranking':not a.no_ai_suggestions,
+                    'question_review_rounds':a.question_review_rounds if not a.no_ai_suggestions else 0,
+                    'investigation_review_rounds':a.investigation_review_rounds,
+                    'synthesize':a.synthesize,
+                    'synthesis_review_rounds':a.synthesis_review_rounds if a.synthesize else 0,
+                    'max_llm_calls':a.max_llm_calls,
+                    'model':a.model,
+                    'num_ctx':a.num_ctx,
+                    'ai_module_summaries':a.ai_summary,
+                    'markdown':not a.no_markdown,
+                    'diagram':not a.no_diagram,
+                    'annotate_drawio':not a.no_update_drawio,
+                }
+                atomic_json(Path(a.out).expanduser().resolve()/'middle-files'/'workflow'/'config.json',workflow_settings)
+            needs_local_ai=(a.ai_suggestions or a.auto_investigate_top>0 or a.synthesize or a.ai_summary)
+            workflow_llm=None
+            if needs_local_ai:
+                from local_workflow import LocalCallBudget
+                workflow_llm=LocalCallBudget(Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx),
+                                             a.out,max_calls=a.max_llm_calls)
+            result.update(summarize_modules(repo,a.out,llm=workflow_llm if a.ai_summary else None))
             from stack_architecture import export_stack_architecture
             result.update(export_stack_architecture(repo,a.out))
             from suggested_investigations import suggest_investigations, auto_investigate
-            if a.auto_investigate_top < 0 or a.auto_investigate_top > 20:
-                raise ValueError('--auto-investigate-top must be between 1 and 20, or omitted')
-            suggestions = suggest_investigations(repo,a.out,top=20)
+            rank_with_qwen=(a.ai_suggestions or a.auto_investigate_top>0) and not a.no_ai_suggestions
+            if not 1 <= a.question_review_rounds <= 3:
+                raise ValueError('--question-review-rounds must be between 1 and 3')
+            if not 0 <= a.investigation_review_rounds <= 2 or not 0 <= a.synthesis_review_rounds <= 2:
+                raise ValueError('Review rounds must be between 0 and 2')
+            suggestions = suggest_investigations(repo,a.out,top=20,
+                llm=workflow_llm if rank_with_qwen else None,ai_rounds=a.question_review_rounds)
             candidates = suggestions.pop('candidates')
             result.update(suggestions)
+            state.record('suggested_investigations','completed',count=result['suggestions_count'],
+                         ranking=suggestions.get('ranking_method','static-heuristic'))
+            failed=False
             if a.auto_investigate_top:
-                ai = llm or Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx)
                 result['auto_investigation'] = auto_investigate(repo,a.out,candidates,
-                    a.auto_investigate_top,ai,
+                    a.auto_investigate_top,workflow_llm,review_rounds=a.investigation_review_rounds,
                     markdown=not a.no_markdown, diagram=not a.no_diagram,
                     update_drawio=not a.no_update_drawio,
                     overwrite_drawio=a.overwrite_drawio, diagram_type=a.diagram_type)
-                if result['auto_investigation']['successful'] != result['auto_investigation']['executed']:
-                    print(json.dumps(result,ensure_ascii=False,indent=2));return 2
-            print(json.dumps(result,ensure_ascii=False,indent=2));return 0
+                failed=(result['auto_investigation']['successful'] != result['auto_investigation']['executed'])
+                state.record('auto_investigations','partial' if failed else 'completed',
+                    requested=a.auto_investigate_top, completed=result['auto_investigation']['successful'])
+            if a.synthesize:
+                from synthesis_workflow import synthesize
+                result['synthesis']=synthesize(repo,a.out,workflow_llm,review_rounds=a.synthesis_review_rounds)
+                state.record('synthesis',result['synthesis']['status'] if result['synthesis']['status'] in ('completed','partial','failed') else 'partial',
+                    modules=result['synthesis'].get('modules'),report=result['synthesis'].get('report'))
+                failed=failed or result['synthesis']['status']!='completed'
+            if a.auto_investigate_top:
+                result['workflow_settings']=workflow_settings
+            if workflow_llm:result['workflow_usage']=workflow_llm.usage()
+            print(json.dumps(result,ensure_ascii=False,indent=2));return 2 if failed else 0
+        if a.command=='synthesize':
+            if not 0 <= a.review_rounds <= 2:raise ValueError('--review-rounds must be 0..2')
+            from local_workflow import LocalCallBudget
+            from synthesis_workflow import synthesize
+            llm=LocalCallBudget(Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx),
+                                a.out,max_calls=a.max_llm_calls,resume=not a.fresh)
+            result=synthesize(repo,a.out,llm,review_rounds=a.review_rounds,fresh=a.fresh)
+            from local_workflow import WorkflowState
+            WorkflowState(a.out).record('synthesis',result['status'] if result['status'] in ('completed','partial','failed') else 'partial',report=result.get('report'))
+            result['workflow_usage']=llm.usage()
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+            return 0 if result['status']=='completed' else 2
         if a.command in ('intelligence','investigate','symbol','trace','impact','clusters','flows','history','diff-impact','vectorize','semantic'):
             from code_intelligence import (build_intelligence, investigate, symbol_query, trace,
                 impact, clusters, business_flows, git_history, diff_impact, vectorize, vector_search)
@@ -123,8 +220,12 @@ def main(argv=None):
             elif a.command=='clusters':result=clusters(repo)
             elif a.command=='flows':result=business_flows(repo)
             else:
-                llm=None if a.non_ai else Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx)
-                result=investigate(repo,a.question,llm,budget=a.budget,max_steps=a.max_steps)
+                if not 0 <= a.review_rounds <= 2:raise ValueError('--review-rounds must be 0..2')
+                from local_workflow import LocalCallBudget
+                llm=None if a.non_ai else LocalCallBudget(
+                    Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx),a.out,max_calls=a.max_llm_calls)
+                result=investigate(repo,a.question,llm,budget=a.budget,max_steps=a.max_steps,
+                                   review_rounds=a.review_rounds)
                 from investigation_report import write_investigation
                 effective_status='insufficient-evidence' if result.get('answer_status')=='insufficient-evidence' else 'completed'
                 output=write_investigation(repo,a.out,result,question=a.question,status=effective_status,
