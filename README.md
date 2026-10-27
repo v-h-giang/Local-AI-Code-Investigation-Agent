@@ -1,389 +1,264 @@
-# Local AI Code Investigation Agent — v4.16
+# Local AI Code Investigation Agent
 
-**Chạy hoàn toàn local · Python + Ollama · Windows · Không cần cloud AI · Read-only đối với source**
+**v4.16.2 · Local-first codebase intelligence · Python + Ollama · Windows / VS Code · Read-only source analysis**
 
-## 🚀 MÌ ĂN LIỀN — 1 LỆNH CHÍNH
+**Language:** English · [Tiếng Việt](README-VN.md)
 
-Mở **PowerShell trong thư mục chứa `agent.py`**, thay đường dẫn project và output cho phù hợp:
+## Quick start — one command
+
+Open PowerShell in the repository folder (where `agent.py` lives). Replace the two Windows paths:
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --out "D:\AgentOutput\architecture"
 ```
 
-**Muốn chạy hết tất cả câu hỏi đã sinh (tối đa 20), thay `--auto-investigate-top` bằng `--auto-investigate-top max`:**
+**What it does:** scans the repository → produces architecture/FE–BE–DB diagrams → generates up to **20 source-backed questions** → uses local Qwen to rank them → investigates the **Top 5** → produces readable Markdown/SVG/Draw.io reports → synthesizes a system-level report. Intermediate files, checkpoints and logs live under `middle-files/`.
+
+**Investigate every generated question (up to 20):**
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --out "D:\AgentOutput\architecture"
 ```
 
-**Lệnh này làm tất cả:** quét kiến trúc → tạo Draw.io → sinh tối đa 20 câu hỏi có bằng chứng → Qwen local xếp hạng → tự điều tra **Top 5** → tạo Markdown/SVG/Draw.io theo từng câu hỏi → tổng hợp báo cáo hệ thống. Mặc định có checkpoint, giới hạn lượt gọi Qwen và lưu file trung gian trong `middle-files/`.
+`max` means **all valid generated questions**, not necessarily 20. The default local Ollama call budget is 160 for Top 5 and 370 for `max`; these are limits, not target call counts. Processing a large repository or running all investigations can take substantial time.
 
-**Mở kết quả đầu tiên:** `D:\AgentOutput\architecture\system_knowledge_report.md` (tổng hợp), `suggested_investigations.md` (câu hỏi), `investigations\index.md` (các báo cáo điều tra) và `system_knowledge.drawio` (sơ đồ).
+**Read these files first:** `system_knowledge_report.md` (system summary), `suggested_investigations.md` (ranked questions), `investigations/index.md` (investigation reports), and `system_knowledge.drawio` (editable diagram).
 
-### 5 lệnh thường dùng nhất
+### Five everyday commands
 
-**1. Chỉ xem kiến trúc và 20 câu hỏi — không chạy AI:**
+All commands below are run from the folder containing `agent.py`.
+
+**1. Scan architecture and generate questions, without running Qwen:**
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --out "D:\AgentOutput\architecture"
 ```
 
-**2. Điều tra một câu hỏi bất kỳ — dùng Qwen local mặc định:**
+**2. Investigate one question with local Qwen (the default):**
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" investigate "Nếu sửa saveOrder thì ảnh hưởng màn hình nào?" --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" investigate "Which screens could be affected if saveOrder changes?" --out "D:\AgentOutput\architecture"
 ```
 
-**3. Tự điều tra Top 10 thay vì Top 5:**
+**3. Automatically investigate the Top 10:**
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 10 --out "D:\AgentOutput\architecture"
 ```
 
-**Chạy TẤT CẢ câu hỏi đã sinh (tối đa 20) trong một lần:**
-
-```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --out "D:\AgentOutput\architecture"
-```
-
-`max` nghĩa là điều tra toàn bộ các câu hỏi *thực sự được sinh ra* (nếu chỉ có 12 câu hợp lệ thì chạy 12, không tự tạo thêm). Con số **13** trong bản hotfix là **số lượt gọi Qwen để xếp hạng ứng viên**, không phải số câu hỏi. `max` vẫn bật Qwen review, Draw.io và báo cáo tổng hợp cuối. Việc chạy hết có thể tốn nhiều lượt gọi Ollama; giới hạn `--max-llm-calls` và cache/checkpoint vẫn có hiệu lực. Với `max`, ngân sách mặc định tăng từ 160 lên **370 lượt gọi Qwen** để giảm nguy cơ hết quota khi xử lý đủ 20 câu; bạn vẫn có thể chủ động điều chỉnh bằng `--max-llm-calls`.
-
-**4. Tự điều tra nhưng không tổng hợp cuối:**
+**4. Investigate the Top 5 but skip final system synthesis:**
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --non-synthesize --out "D:\AgentOutput\architecture"
 ```
 
-**5. Chỉ tổng hợp lại các tài liệu đã có:**
+**5. Rebuild only the final synthesis from existing reports:**
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" synthesize --out "D:\AgentOutput\architecture"
 ```
 
-> **Để chạy lệnh AI lần đầu:** cài [Ollama](https://ollama.com/download/windows), chạy `ollama pull qwen3:8b`. Kiểm tra với `py -3 agent.py --project ".\sample_project" doctor --probe`. Python 3.11+; không cần Node.js. Lệnh `architecture` không có `--auto-investigate-top` không gọi Qwen.
+> **First-time setup:** Install [Python 3.11+](https://www.python.org/downloads/windows/) and [Ollama for Windows](https://ollama.com/download/windows), then run `ollama pull qwen3:8b`. No Node.js, cloud LLM or external AI API is needed. Plain `architecture` runs without Qwen.
 
-### Muốn bỏ bước nào? Dùng `--non-*`
-
-| Cờ | Tác dụng |
-|---|---|
-| `--non-synthesize` | Bỏ tổng hợp cuối |
-| `--non-ai-suggestions` | Bỏ Qwen xếp hạng câu hỏi; vẫn sinh ứng viên dựa trên source |
-| `--non-review` | Bỏ các vòng phản biện bổ sung |
-| `--non-investigation-review` | Bỏ vòng review điều tra |
-| `--non-synthesis-review` | Bỏ vòng review báo cáo tổng hợp |
-| `--non-markdown` | Không tạo Markdown từng investigation |
-| `--non-diagram` | Không vẽ sơ đồ điều tra riêng |
-| `--non-update-drawio` | Không tạo Draw.io kiến trúc có chú thích |
-
-Mặc định `--auto-investigate-top` **không cần nhập số = Top 5**. Có thể chỉ định 1–20 hoặc `max` (chạy hết tối đa 20). Nếu chỉ gọi `investigate`, dùng `--non-ai` để tìm evidence mà không gọi Qwen. Các lệnh cần dùng chung `--out` để đọc đúng index và kết quả đã tạo.
-
-### Đọc output ở đâu?
-
-```text
-D:\AgentOutput\architecture\
-├── architecture.md / architecture.drawio
-├── suggested_investigations.md
-├── investigations\index.md
-├── investigations\INV-001\result.md
-├── investigations\INV-001\investigation.drawio / investigation.svg
-├── system_knowledge_report.md
-├── system_knowledge.drawio / system_knowledge.svg
-└── middle-files\           # JSON, SQLite, CSV, cache, checkpoint, logs
-```
-
-**Độ tin cậy:** quan hệ call/FE→BE→SQL suy ra từ phân tích tĩnh hoặc heuristic **không phải chứng minh runtime**. Kết luận không đủ bằng chứng phải được đánh dấu chưa xác minh. Dự án source không được gửi tới cloud AI.
-
----
-
-## Mục lục hướng dẫn đầy đủ
-
-- [Cài đặt Windows](#2-yêu-cầu-và-cài-đặt)
-- [Workflow chi tiết](#3-quy-trình-sử-dụng-khuyến-nghị)
-- [Danh sách toàn bộ lệnh](#4-danh-sách-lệnh)
-- [File đầu ra](#5-file-đầu-ra)
-- [Cơ chế điều tra](#6-agent-điều-tra-như-thế-nào)
-- [Cấu hình và giới hạn](#7-cấu-hình-hiệu-năng-và-lưu-ý)
-- [Xử lý lỗi và test](#8-xử-lý-sự-cố-và-kiểm-thử)
-- [Tài liệu kỹ thuật](#9-tài-liệu-chuyên-sâu)
-
-## 2. Yêu cầu và cài đặt
-
-- **Windows 10/11**, PowerShell; VS Code tùy chọn.
-- **Python 3.11+**. Đường chạy mặc định dùng **Python standard library**, không yêu cầu Node.js, Docker hay dịch vụ cloud.
-- **Ollama cho Windows** và model `qwen3:8b` khi dùng AI. Các tác vụ quét/graph cơ bản vẫn chạy được khi chưa bật Ollama.
-- RAM còn trống phải đủ cho model và KV cache; `num_ctx=2048` là thiết lập mặc định nhằm giảm áp lực bộ nhớ, không bảo đảm chạy được trên mọi máy.
-
-### Lấy source và kiểm tra Python
+## Installation (Windows)
 
 ```powershell
+# Get the agent
 git clone https://github.com/v-h-giang/Local-AI-Code-Investigation-Agent.git
 cd Local-AI-Code-Investigation-Agent
 py -3 --version
-```
 
-Nếu đã clone trước đó, dùng `git pull origin main` trong thư mục repository.
-
-### Cài Ollama khi cần điều tra bằng AI
-
-1. Tải Ollama từ <https://ollama.com/download/windows> và chạy ứng dụng.
-2. Cài model:
-
-```powershell
+# Only needed for AI-powered workflows
 ollama pull qwen3:8b
 ollama list
-```
 
-3. Kiểm tra agent và khả năng sinh nội dung:
-
-```powershell
-py -3 agent.py --project ".\sample_project" doctor
+# Check the connection and run a tiny generation
 py -3 agent.py --project ".\sample_project" doctor --probe
 ```
 
-`doctor` kiểm tra trạng thái kết nối; `--probe` thực sự gọi model để tạo một phản hồi ngắn. Nếu service chưa chạy, hãy khởi động Ollama. Không chạy hai server cùng chiếm port `11434`.
-
-### Thử với sample repository
+Start the Ollama desktop application if the local service is not running. `doctor --probe` loads the model and makes a real inference call; `doctor` without `--probe` only checks availability. You can try the included sample without an LLM:
 
 ```powershell
-py -3 agent.py --project ".\sample_project" architecture --out ".\output\demo-architecture"
-py -3 agent.py --project ".\sample_project" investigate "Tìm nơi xử lý đơn hàng và SQL liên quan" --out ".\output\demo-architecture"
+py -3 agent.py --project ".\sample_project" architecture --out ".\output\sample-architecture"
 ```
 
-Lệnh thứ hai cần Ollama; lệnh đầu tiên không cần, trừ khi bật `--ai-summary` hoặc `--auto-investigate-top`.
+To update a previous clone, run `git pull origin main`. The **project** supplied to `--project` is a local source directory, not a GitHub URL. Place the **output** outside the analyzed project if you do not want generated files mixed with its source.
 
-## 3. Quy trình sử dụng khuyến nghị
+## Workflow modes and defaults
 
-**Lần đầu:** `architecture` → đọc `architecture.md`, `module_summary.md`, `suggested_investigations.md` → chọn câu hỏi → chạy `investigate`.
-
-**Khi cần phân tích sâu:** tăng `--max-steps` (tối đa 6), giữ `--budget` phù hợp context; hoặc dùng `--auto-investigate-top` để tự xếp hạng, điều tra Top 5 và tổng hợp toàn hệ thống. Nhập `N` sau cờ nếu muốn xử lý số lượng khác.
-
-**Khi source thay đổi:** chạy lại `architecture` hoặc `intelligence` để cập nhật chỉ mục. Index tăng dần dựa trên đường dẫn/kích thước/mtime; nếu nội dung thay đổi nhưng metadata vẫn giữ nguyên, có thể cần xóa index tương ứng và xây lại.
-
-**Tách riêng 2 dạng AI trong `architecture`:**
-
-```powershell
-# Qwen tóm tắt từng module (không tự điều tra câu hỏi)
-py -3 agent.py --project "D:\Work\LegacyProject" architecture --ai-summary --out "D:\AgentOutput\architecture"
-
-# Kết hợp tóm tắt module và tự điều tra Top 3
-py -3 agent.py --project "D:\Work\LegacyProject" architecture --ai-summary --auto-investigate-top 3 --out "D:\AgentOutput\architecture"
-```
-
-## 4. Danh sách lệnh
-
-Các tùy chọn **chung** như `--project`, `--model`, `--host`, `--num-ctx`, `--timeout` được đặt **trước tên lệnh**. Các tùy chọn riêng như `--out`, `--budget`, `--max-steps` đặt **sau tên lệnh**.
-
-### Nhóm kiến trúc và điều tra
-
-| Lệnh | Tác dụng | Qwen |
+| Command | What happens | Ollama needed? |
 |---|---|---|
-| `architecture` | Quét kiến trúc, Draw.io, module summary, index và Top 20 suggestions | Không, trừ khi có flag AI |
-| `architecture --ai-summary` | Tóm tắt module với Qwen | Có |
-| `architecture --auto-investigate-top [N]` | Xếp hạng, tự điều tra Top 5 (hoặc N), tự tổng hợp hệ thống | Có |
-| `intelligence` | Tạo/cập nhật SQLite index cho symbol, references, graph, SQL | Không |
-| `investigate "câu hỏi"` | Agent điều tra nhiều vòng có Qwen | **Có (mặc định)** |
-| `investigate "câu hỏi" --non-ai` | Chỉ tìm evidence bằng từ khóa/index | Không |
-| `symbol NAME` | Tra khai báo và tham chiếu ứng viên | Không |
-| `trace NAME` | Duyệt caller/callee ứng viên; `--direction in/out` | Không |
-| `impact NAME` | Duyệt phụ thuộc ngược, khoanh vùng ảnh hưởng có thể xảy ra | Không |
-| `flows` | Liệt kê dấu hiệu FE/BE/SQL và liên kết heuristic | Không |
-| `clusters` | Nhóm thành phần có liên kết trong static graph | Không |
-| `history` / `diff-impact` | Đọc lịch sử Git / tác động từ Git diff cục bộ | Không |
+| `architecture` | Static architecture diagrams, module overview, intelligence index, up to 20 questions | No |
+| `architecture --auto-investigate-top` | Full pipeline: local ranking, Top 5 investigations, diagrams, synthesis | Yes |
+| `architecture --auto-investigate-top N` | Full pipeline for Top N (`1`–`20`) | Yes |
+| `architecture --auto-investigate-top max` | Full pipeline for all generated questions (up to 20) | Yes |
+| `architecture --ai-suggestions` | Qwen ranking/review of source-backed question candidates, without auto-investigating | Yes |
+| `architecture --ai-summary` | Local AI summaries for individual modules | Yes |
+| `investigate "question"` | Iterative tool-based investigation, human-readable outputs | Yes, by default |
+| `investigate "question" --non-ai` | Lexical/source evidence retrieval only | No |
+| `synthesize` | Hierarchical synthesis of existing architecture and investigation results | Yes |
 
-Ví dụ các lệnh chuyên biệt (yêu cầu đã chạy `intelligence` hoặc `architecture` với cùng `--out`):
+Generated questions are divided into **Business Flows** and **Technical Architecture**. The generator never pads a short list with invented questions. Graph and source evidence are used for candidate selection; Qwen ranks existing candidates when AI ranking is enabled.
+
+### Disable optional steps with `--non-*`
+
+The full automatic workflow enables its recommended stages by default. Disable only what you do not need:
+
+| Flag | Effect |
+|---|---|
+| `--non-synthesize` | Skip final system synthesis |
+| `--non-ai-suggestions` | Skip Qwen question ranking; keep static grounded ordering |
+| `--non-review` | Skip extra critique passes across ranking, investigation and synthesis |
+| `--non-investigation-review` | Skip the investigation evidence reviewer |
+| `--non-synthesis-review` | Skip final synthesis review |
+| `--non-markdown` | Skip individual investigation Markdown reports |
+| `--non-diagram` | Skip individual investigation Draw.io diagrams |
+| `--non-update-drawio` | Skip annotated versions of architecture diagrams |
+
+For a **single** `investigate` command, use `--non-ai` to avoid Qwen altogether. These options do not imply that the plain `architecture` command calls the model.
+
+### Useful tuning options
+
+```powershell
+# Increase the number of tool steps for one question (1–6)
+py -3 agent.py --project "D:\Work\LegacyProject" investigate "Trace order submission through FE, BE and SQL" --max-steps 6 --budget 1200 --out "D:\AgentOutput\architecture"
+
+# Turn off the individual diagram generation, but still run automatic investigations
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 5 --non-diagram --out "D:\AgentOutput\architecture"
+```
+
+Global options go **before** the command: `--model` (default `qwen3:8b`), `--host` (default `http://127.0.0.1:11434`), `--num-ctx` (default `2048`), and `--timeout` (default `240` seconds). Command-specific options such as `--out`, `--budget`, `--max-steps`, `--max-llm-calls` go **after** the command.
+
+```powershell
+py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 architecture --auto-investigate-top max --out "D:\AgentOutput\architecture"
+```
+
+A single investigation defaults to `--max-steps 4`, `--review-rounds 1`, and `--max-llm-calls 80`. Question ranking defaults to 2 passes and final synthesis review to 2 passes. The automatic workflow runs local model calls sequentially and uses resumable checkpoints and cached results where supported.
+
+## Where the results go
+
+```text
+D:\AgentOutput\architecture\
+├── architecture.md
+├── architecture.drawio
+├── architecture.investigated.drawio
+├── module_summary.md
+├── stack_architecture.md
+├── frontend_architecture.drawio
+├── backend_architecture.drawio
+├── fe_be_architecture.drawio
+├── frontend_reference.drawio
+├── backend_reference.drawio
+├── suggested_investigations.md
+├── system_knowledge_report.md
+├── system_knowledge.drawio
+├── system_knowledge.svg
+├── investigations\
+│   ├── index.md
+│   ├── INV-001\
+│   │   ├── result.md
+│   │   ├── investigation.drawio
+│   │   └── investigation.svg
+│   └── ...
+└── middle-files\
+    ├── architecture.json
+    ├── code_intelligence.sqlite
+    ├── suggested_investigations.json
+    ├── investigation_annotations.json
+    ├── investigations\          # technical JSON / evidence CSV / manifest
+    ├── workflow\                # settings / state / audit / LLM cache
+    ├── synthesis\               # claims / intermediate summaries / checkpoints
+    ├── drawio-baselines\        # only if overwriting original diagrams
+    └── .module_summary_cache\
+```
+
+This is an illustrative tree; **files only appear when the corresponding stage is enabled and has output**. Some FE/BE diagrams also have `.investigated.drawio` variants when a source-matched architecture diagram exists. Human-facing reports/diagrams stay outside `middle-files/`; machine-readable intermediates go inside it.
+
+To open and edit `.drawio` files, use [diagrams.net](https://app.diagrams.net) or a compatible VS Code extension. Investigation diagrams only show relationships supported by available static graph evidence. By default, original architecture diagrams are preserved; annotated copies use `.investigated.drawio`. `--overwrite-drawio` is an explicit opt-in that backs up originals under `middle-files/drawio-baselines/`.
+
+## Advanced investigation commands
+
+After running `architecture` or `intelligence` with the **same `--out`**, these commands query the local intelligence index:
 
 ```powershell
 py -3 agent.py --project "D:\Work\LegacyProject" symbol OrderService --out "D:\AgentOutput\architecture"
 py -3 agent.py --project "D:\Work\LegacyProject" trace processOrder --depth 3 --direction out --out "D:\AgentOutput\architecture"
 py -3 agent.py --project "D:\Work\LegacyProject" impact saveOrder --depth 4 --out "D:\AgentOutput\architecture"
 py -3 agent.py --project "D:\Work\LegacyProject" flows --out "D:\AgentOutput\architecture"
-py -3 agent.py --project "D:\Work\LegacyProject" history --file backend/OrderService.java --limit 10 --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" clusters --out "D:\AgentOutput\architecture"
+py -3 agent.py --project "D:\Work\LegacyProject" history --file backend/OrderService.java --out "D:\AgentOutput\architecture"
 py -3 agent.py --project "D:\Work\LegacyProject" diff-impact --base HEAD~1 --head HEAD --out "D:\AgentOutput\architecture"
 ```
 
-`history` và `diff-impact` cần source là một Git working tree có lịch sử/ref tương ứng. Những lệnh kỹ thuật này **không thay thế AI**: chúng trả dữ liệu phân tích tĩnh để bạn hoặc `investigate` xem xét.
+Additional commands include `search`, `refs`, `read`, `index`, `ask`, `chat`, `report`, `overview`, and `design`. `vectorize` and `semantic` use an **optional local embedding model** (for example `nomic-embed-text`); they do not require cloud embeddings. See [Code Intelligence](README_CODE_INTELLIGENCE.md) for details.
 
-### Các lệnh bổ sung
-
-| Lệnh | Ghi chú |
-|---|---|
-| `search QUERY` / `refs NAME` / `read PATH` | Tìm text/reference, đọc dòng source không cần AI |
-| `index` | Buộc xây lại SQLite FTS search index cho các chức năng tìm kiếm truyền thống |
-| `ask "câu hỏi"` / `chat` | Chế độ hỏi đáp/terminal tương tác dùng Ollama |
-| `overview` | Khảo sát toàn repo không AI; `overview --ai` bật AI |
-| `report --topic ...` | Xuất inventory và Draw.io tham chiếu tĩnh |
-| `design --topic "..."` | Tạo thiết kế theo chủ đề với Ollama |
-| `design` (không `--topic`) | Khảo sát toàn repo và viết báo cáo AI có resume/checkpoint |
-| `vectorize` / `semantic` | Embedding và vector similarity *tùy chọn*, dùng model Ollama embedding riêng |
-| `doctor --probe` | Kiểm tra Ollama bằng yêu cầu sinh văn bản |
-
-Để thử embedding cục bộ (không mặc định):
-
-```powershell
-ollama pull nomic-embed-text
-py -3 agent.py --project "D:\Work\LegacyProject" vectorize --embedding-model nomic-embed-text --max-symbols 200 --out "D:\AgentOutput\architecture"
-py -3 agent.py --project "D:\Work\LegacyProject" semantic "find order validation" --embedding-model nomic-embed-text --out "D:\AgentOutput\architecture"
-```
-
-## 5. File đầu ra
-
-Các báo cáo dành cho người đọc ở cấp đầu ra chính; toàn bộ **JSON, CSV, cache, checkpoint, registry** được lưu trong `middle-files/`.
+## How the agent works
 
 ```text
-D:\AgentOutput\architecture\
-├── architecture.md
-├── architecture.drawio                    # Gốc: không bị ghi đè theo mặc định
-├── architecture.investigated.drawio       # Bản có highlight tích lũy
-├── module_summary.md
-├── stack_architecture.md
-├── frontend_architecture.drawio
-├── frontend_architecture.investigated.drawio
-├── backend_architecture.drawio
-├── backend_architecture.investigated.drawio
-├── fe_be_architecture.drawio
-├── fe_be_architecture.investigated.drawio
-├── frontend_reference.drawio
-├── frontend_reference.investigated.drawio
-├── backend_reference.drawio
-├── backend_reference.investigated.drawio
-├── suggested_investigations.md
-├── system_knowledge_report.md              # Tổng hợp sau auto-investigate-top
-├── system_knowledge.drawio
-├── system_knowledge.svg
-├── investigations\
-│   ├── index.md                          # Tự sinh khi dùng --auto-investigate-top
-│   ├── INV-001\
-│   │   ├── result.md                     # Kết luận + file:line + bước điều tra
-│   │   ├── investigation.drawio          # Sơ đồ chỉ có evidence thật
-│   │   └── investigation.svg             # Preview bên trong result.md
-│   └── INV-Q-<hash>\                     # Câu hỏi chạy bằng investigate trực tiếp
-│       ├── result.md
-│       ├── investigation.drawio
-│       └── investigation.svg
-└── middle-files\
-    ├── architecture.json
-    ├── stack_architecture.json
-    ├── module_summary.json
-    ├── code_intelligence.sqlite
-    ├── suggested_investigations.json
-    ├── investigation_annotations.json    # Các highlight tích lũy
-    ├── investigations\
-    │   ├── INV-001.json                  # Kết quả máy đọc
-    │   ├── INV-001.evidence.csv
-    │   └── manifest.json
-    ├── drawio-baselines\                  # Chỉ khi dùng --overwrite-drawio
-    ├── workflow\                           # state, config, LLM-call audit, cache
-    ├── synthesis\                          # claim ledger, checkpoints, review logs
-    └── .module_summary_cache\
+Source files (Java / SQL / ActionScript / MXML / XML / configuration)
+      |
+      +--> static architecture scanner --> modules + editable Draw.io
+      |
+      +--> incremental SQLite symbol/search/dependency index
+                                              |
+             source-backed question generator--+
+                                              |
+                                    local Qwen ranking & review
+                                              |
+                            bounded tool-driven investigations
+                                              |
+                         evidence verification + readable reports
+                                              |
+                              hierarchical local synthesis
+                                              |
+                          system_knowledge_report.md + Draw.io
 ```
 
-File `.investigated.drawio` chỉ được tạo khi bản `.drawio` gốc tương ứng đã tồn tại. Nếu chỉ chạy `intelligence` mà chưa chạy `architecture`, bạn vẫn có thể xuất sơ đồ riêng cho câu hỏi, nhưng chưa thể chú thích sơ đồ kiến trúc chưa có.
+Python handles indexing, graph traversal, file/line evidence, checkpoints and stopping conditions. Qwen handles short planning, ranking, interpretation and summarization tasks. The software uses a bounded, local multi-loop workflow rather than attempting to stuff an entire codebase into one prompt.
 
-**Ý nghĩa màu sắc:** Box theo tầng FE/BE/DB; viền xanh là node liên quan đến bằng chứng; đầu mũi tên xanh chỉ xuất hiện nếu có **cạnh tĩnh đúng giữa các file được dẫn chứng**. Nét đứt trong Reference tiếp tục biểu thị cấu trúc tham khảo, không phải runtime call. Sơ đồ không tự nối FE → BE → SQL nếu thiếu bằng chứng quan hệ.
+**Evidence limitations:** Symbol extraction uses optional Tree-sitter support with a lexical fallback; this is not a full Java/ActionScript language server. Candidate call edges, dependency injection, overloads, dynamic dispatch, `RemoteObject` mappings, and FE → BE → SQL flows are **not verified runtime execution traces**. Source citations and diagrams help inspection but do not turn heuristics into proof. If evidence is missing, the agent should report uncertainty rather than invent behavior.
 
-**Các tùy chọn giảm bớt của `investigate` và `architecture --auto-investigate-top [N]`:**
+**Privacy and safety:** AI calls are directed to an HTTP loopback Ollama endpoint. The investigation tools do not give Qwen arbitrary shell commands, source writes or SQL execution. Outputs, SQLite databases and logs can still contain sensitive material derived from source code; do not publish them without review. `git clone`/`git pull` are separate network operations for obtaining agent source, not AI inference.
 
-| Cờ | Tác dụng |
+## Troubleshooting
+
+| Symptom | What to check |
 |---|---|
-| `--non-markdown` (`--no-markdown`) | Không tạo Markdown cho từng investigation (không ảnh hưởng `architecture.md`) |
-| `--non-diagram` (`--no-diagram`) | Không sinh `investigation.drawio` riêng |
-| `--non-update-drawio` (`--no-update-drawio`) | Không cập nhật bản `.investigated.drawio` |
-| `--diagram-type auto\|flow\|impact\|symbol` | Chọn hướng bố trí sơ đồ; không thay đổi các liên kết từ source |
-| `--overwrite-drawio` | Ghi đè `.drawio` gốc **chỉ khi chủ động yêu cầu**, backup ở `middle-files/drawio-baselines/` |
+| Ollama unreachable | Start Ollama; run `ollama list` and `doctor --probe` |
+| Model not installed | Run `ollama pull qwen3:8b` or select a locally installed `--model` |
+| Slow after FE/BE/DB diagrams | Check `[Suggestions]`, `[Intelligence]` and Qwen-ranking progress logs. v4.16.1 optimizes FTS cleanup and graph reuse |
+| Out of memory / very slow inference | Keep `--num-ctx 2048`; start with Top 1 or Top 5 instead of `max` |
+| Intelligence index missing | Run `architecture` or `intelligence` using the same `--out` |
+| Source changes not detected | Re-run indexing; if file size and mtime were preserved, rebuild the affected index |
+| Partial auto-investigation | Check `middle-files/investigations/manifest.json` and workflow state/logs |
+| No evidence for a relationship | Treat it as unresolved; inspect `symbol`, `trace`, `flows` and the cited source |
 
-Riêng `architecture --auto-investigate-top [N]`, có thêm `--non-synthesize`, `--non-ai-suggestions`, `--non-review`, `--non-investigation-review` và `--non-synthesis-review`. Xem [README_V416.md](README_V416.md).
-
-Mở Draw.io tại [diagrams.net](https://app.diagrams.net) → File → Open From → Device. Các file `.drawio` vẫn có thể chỉnh sửa từng node.
-
-Chỉ mục SQLite phục vụ `index`, `chat`, `design` còn được quản lý riêng ở `%USERPROFILE%\.local_code_agent\index\`, khác với `middle-files\code_intelligence.sqlite`.
-
-## 6. Agent điều tra như thế nào?
-
-```text
-Source files
-   │
-   ├── Static scanner → Architecture graph / Draw.io
-   └── Symbol + reference extraction → SQLite FTS5 / relations / SQL hints
-                                      │
-Question → Qwen investigation plan ───┤
-                                      ▼
-                         Read-only tools + evidence
-                           symbol / trace / impact
-                           flows / search / history
-                                      │
-                         Qwen chọn bước tiếp theo
-                           (tối đa --max-steps)
-                                      │
-                                      ▼
-                          Qwen tóm tắt kết quả
-                           kèm evidence file:line
-```
-
-- **Symbol extraction:** có adapter Tree-sitter *nếu đã cài grammar tương ứng*; mặc định có lexical parser dự phòng, không phải Java LSP đầy đủ.
-- **References / caller–callee:** phần lớn là các quan hệ **ứng viên** được ghép từ cú pháp/tên, chưa giải quyết đầy đủ overload, dependency injection, dynamic dispatch hoặc reflection.
-- **FE → BE → SQL:** có thể tìm dấu hiệu `RemoteObject`, Java class và mapper SQL, nhưng không chứng minh được endpoint mapping hay đường thực thi runtime.
-- **Retrieval:** SQLite FTS5/BM25, symbol và graph chọn một tập evidence có giới hạn; `--non-ai` chỉ trả retrieval, không suy luận nghiệp vụ.
-- **AI investigation:** Qwen được phép gọi các công cụ điều tra trong allowlist theo nhiều bước (mặc định 4, tối đa 6). Kết luận thiếu bằng chứng phải được ghi là chưa xác minh. Việc có `file:line` không tự động bảo đảm kết luận AI chính xác.
-- **Suggestions:** bộ xếp hạng heuristic xác định những câu hỏi có dấu hiệu source. `--auto-investigate-top` tự dùng Qwen để xếp hạng và điều tra Top 5, sau đó tổng hợp hệ thống.
-
-## 7. Cấu hình, hiệu năng và lưu ý
-
-| Tùy chọn chung | Mặc định | Ý nghĩa |
-|---|---|---|
-| `--model` | `qwen3:8b` | Model AI chạy cục bộ |
-| `--host` | `http://127.0.0.1:11434` | Chỉ chấp nhận HTTP loopback |
-| `--num-ctx` | `2048` | Context cho Ollama |
-| `--timeout` | `240` | Timeout HTTP, giây |
-| `investigate --budget` | `1200` | Giới hạn evidence cung cấp cho agent |
-| `investigate --max-steps` | `4` | Tối đa 1–6 bước điều tra |
-
-Ví dụ đổi cấu hình:
+Typical exit codes: `0` for success, `1` for handled input/Ollama/I/O errors, and `2` for partially failed automatic workflows or incomplete long-running tasks. Consult the actual error/report rather than the code alone.
 
 ```powershell
-py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048 --timeout 240 investigate "Giải thích logic lưu đơn hàng" --max-steps 4 --out "D:\AgentOutput\architecture"
-```
-
-**Hiệu năng:** Quét và lập chỉ mục là xử lý nội bộ; các câu hỏi Qwen có thể cần nhiều lượt sinh nội dung. Với project lớn, mặc định Top 5 sẽ chạy nhiều lượt Ollama tuần tự; có thể thử `--auto-investigate-top 1` để kiểm tra chất lượng trước. Không nên coi Top 20 là 20 kết luận đã được xác minh.
-
-**Bảo mật:** Công cụ đọc source và ghi index/báo cáo bên ngoài source; Qwen không được cung cấp công cụ thực thi shell tùy ý, sửa source hay chạy SQL. Code, log, output và SQLite vẫn có thể chứa thông tin nhạy cảm — tránh commit hoặc chia sẻ các file được sinh từ dự án nội bộ. Ollama được ràng buộc kết nối HTTP localhost.
-
-## 8. Xử lý sự cố và kiểm thử
-
-| Triệu chứng | Kiểm tra / cách xử lý |
-|---|---|
-| `Ollama not reachable` | Mở Ollama; chạy `ollama list`, sau đó `doctor --probe` |
-| Model không tồn tại | `ollama pull qwen3:8b`; kiểm tra đúng `--model` |
-| Hết RAM / trả lời chậm | Giữ `--num-ctx 2048`, giảm `--max-steps`, thử 1 auto investigation |
-| `Code intelligence index absent` | Chạy `architecture` hoặc `intelligence` với **đúng `--out`** |
-| Source đã thay đổi nhưng index chưa nhận | Chạy lại `intelligence`/`architecture`; nếu timestamp/size không đổi, cân nhắc xây lại riêng index |
-| Không tìm thấy evidence | Kiểm tra tên class, mapper/config bị bỏ qua; mở kết quả `symbol`, `flows`, `search` để đối chiếu |
-| Một auto investigation lỗi | Mở `middle-files/investigations/manifest.json` và `middle-files/investigations/INV-xxx.json`; các câu còn lại vẫn có thể được chạy |
-| File Draw.io có đường chéo hoặc chồng nhau | Dữ liệu graph lớn có thể vượt khả năng layout mặc định; sắp xếp lại trong diagrams.net |
-
-Chạy bộ test từ thư mục chứa `agent.py`:
-
-```powershell
+# Test suite
 py -3 -m unittest discover -s tests -v
+
+# CLI reference
+py -3 agent.py --help
+py -3 agent.py --project ".\sample_project" architecture --help
 ```
 
-**Mã thoát CLI:** `0` thường là thành công; `1` cho lỗi đầu vào/Ollama hoặc I/O được xử lý; `2` có thể biểu thị auto-investigation thất bại một phần hoặc tác vụ overview/design chưa hoàn tất. Luôn đọc JSON và thông báo lỗi thực tế thay vì dựa vào mã thoát đơn lẻ.
+## Version-specific and technical documentation
 
-## 9. Tài liệu chuyên sâu
+These documents remain in their existing languages and are **not replaced or translated** by this README:
 
-- [v4.14 — Investigation Reports & Annotated Draw.io](README_V414.md): Markdown, sơ đồ chứng cứ, cập nhật kiến trúc và `middle-files/`.
-- [v4.16 — One-switch automatic workflow](README_V416.md): mặc định tốt nhất cho `--auto-investigate-top`, các tùy chọn `--non-*`.
-- [v4.15 — Local multi-loop workflow](README_V415.md): thiết kế nhiều vòng với Qwen local.
-- [v4.13 — Suggested Investigations](README_V413.md): Top 20, hai nhóm câu hỏi và `--auto-investigate-top`.
-- [v4.12 — Iterative Investigation](README_V412.md): Qwen chọn công cụ nhiều vòng, kiểm tra evidence.
-- [Code Intelligence](README_CODE_INTELLIGENCE.md): symbol, trace, impact, flows, history và vector search.
-- [Architecture & Module Summary](README_ARCHITECTURE.md): cách trích xuất graph và tóm tắt module.
-- [FE/BE/DB Stack & Draw.io](README_STACK_ARCHITECTURE.md): framework, database và sơ đồ Reference.
-- [Draw.io Layout v4.8](README_V48.md): lane, nhóm framework, màu và đường nối.
-- [Legacy v4 / Full Repository Scan](README_V4.md): các workflow `design`, `overview` và checkpoint lịch sử.
+- [v4.16 — Smart workflow defaults](README_V416.md)
+- [v4.16.1 — Performance hotfix](README_V4161_PERFORMANCE.md)
+- [v4.15 — Local multi-loop workflow](README_V415.md)
+- [v4.14 — Readable reports and annotated Draw.io](README_V414.md)
+- [v4.13 — Suggested Investigations](README_V413.md)
+- [v4.12 — Iterative Qwen Investigation](README_V412.md)
+- [v4.11 — CLI default AI behavior](README_V411.md)
+- [Code Intelligence reference](README_CODE_INTELLIGENCE.md)
+- [Architecture and Module Summary](README_ARCHITECTURE.md)
+- [FE/BE/DB Stack Architecture](README_STACK_ARCHITECTURE.md)
+- [v4.8 Draw.io layouts](README_V48.md)
+- [v4 legacy overview/design workflow](README_V4.md)
 
-> **README này là hướng dẫn sử dụng chính cho v4.14.** Các tài liệu theo phiên bản được giữ làm chi tiết kỹ thuật hoặc lịch sử thay đổi; khi ví dụ cũ xung đột với CLI hiện tại, ưu tiên `py -3 agent.py --help` và trợ giúp của từng lệnh.
-
-
-## v4.16.1 — Fix slow stage after FE/BE/DB diagrams
-
-The Code Intelligence index now uses indexed FTS rowid cleanup, skips unchanged graph resolution and prints progress; Qwen ranking second pass is focused on the strongest source-backed candidates. See [performance fix and diagnosis](README_V4161_PERFORMANCE.md). All intermediates remain in `middle-files/`.
+**Current guide:** v4.16.2. If older version notes conflict with the current CLI, use `py -3 agent.py --help` and the command-specific `--help` output as the source of truth.
