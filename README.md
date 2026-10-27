@@ -1,6 +1,6 @@
 # Local AI Code Investigation Agent
 
-**Phiên bản hiện tại: v4.13 · Python · Windows · Ollama cục bộ · Read-only đối với source**
+**Phiên bản hiện tại: v4.14 · Python · Windows · Ollama cục bộ · Read-only đối với source**
 
 Công cụ hỗ trợ **khảo sát kiến trúc và điều tra source code legacy** (Java, Adobe Flex/AIR, ActionScript, MXML, XML mapper, SQL). Agent kết hợp phân tích tĩnh, chỉ mục SQLite, graph quan hệ và **Qwen chạy qua Ollama trên máy của bạn** để tìm bằng chứng, truy vết các quan hệ ứng viên và trả lời câu hỏi bằng ngôn ngữ tự nhiên.
 
@@ -43,7 +43,7 @@ Mở file `D:\AgentOutput\architecture\suggested_investigations.md` để chọn
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top 5 --out "D:\AgentOutput\architecture"
 ```
 
-`--auto-investigate-top N` nhận `1` đến `20`; **không có tùy chọn này thì không tự chạy điều tra bằng Qwen**. Mỗi câu hỏi được lưu riêng dưới `investigations/`; trạng thái và lỗi nằm trong `investigations/manifest.json`. Danh sách câu hỏi được xếp hạng bằng heuristic, **không phải do Qwen chấm điểm**.
+`--auto-investigate-top N` nhận `1` đến `20`; **không có tùy chọn này thì không tự chạy điều tra bằng Qwen**. Mỗi câu hỏi được lưu riêng dưới `investigations/`; trạng thái và lỗi nằm trong `middle-files/investigations/manifest.json`. Danh sách câu hỏi được xếp hạng bằng heuristic, **không phải do Qwen chấm điểm**.
 
 ### C. Hỏi một câu bất kỳ — Qwen được bật mặc định
 
@@ -60,6 +60,17 @@ py -3 agent.py --project "D:\Work\LegacyProject" investigate "OrderService" --no
 ```
 
 > `investigate --non-ai` là **lexical evidence retrieval**, không hiểu sâu mọi câu hỏi ngôn ngữ tự nhiên. Để dùng `investigate` hoặc các công cụ symbol/graph trên một output mới, chạy `architecture` hoặc `intelligence` trước với **cùng đường dẫn `--out`**.
+
+### D. Đọc kết quả trực tiếp dưới dạng Markdown và Draw.io (v4.14)
+
+`investigate` in **kết luận và đường dẫn báo cáo dễ đọc** ra terminal, thay vì in cả khối JSON dài. Mỗi câu hỏi có thư mục riêng trong `investigations/` chứa:
+
+- `result.md`: câu hỏi, kết luận, độ tin cậy, bằng chứng `file:line`, công cụ đã dùng và giới hạn.
+- `investigation.svg`: ảnh minh họa xem trực tiếp trong báo cáo Markdown.
+- `investigation.drawio`: các file liên quan được chia lane FE / BE / DB; **chỉ vẽ mũi tên nếu graph tĩnh thực sự có cạnh tương ứng**.
+- `architecture.investigated.drawio` và những sơ đồ quan sát khác: giữ nguyên bố cục gốc, tô nổi node liên quan và có note. Mặc định **không sửa `architecture.drawio` gốc**.
+
+Toàn bộ `result.json`, evidence CSV, manifest và registry highlight được đặt trong `middle-files/`. Với `architecture --auto-investigate-top N`, xem `investigations/index.md` để mở từng báo cáo bằng một click.
 
 ## 2. Yêu cầu và cài đặt
 
@@ -182,36 +193,68 @@ py -3 agent.py --project "D:\Work\LegacyProject" semantic "find order validation
 
 ## 5. File đầu ra
 
-Khi chạy `architecture --out "D:\AgentOutput\architecture"`:
+Các báo cáo dành cho người đọc ở cấp đầu ra chính; toàn bộ **JSON, CSV, cache, checkpoint, registry** được lưu trong `middle-files/`.
 
 ```text
 D:\AgentOutput\architecture\
-├── architecture.md                    # Modules và quan hệ tĩnh
-├── architecture.drawio                # Sơ đồ dependency module
-├── module_summary.md                  # Tóm tắt module
-├── stack_architecture.md              # Framework, FE/BE/DB và evidence
+├── architecture.md
+├── architecture.drawio                    # Gốc: không bị ghi đè theo mặc định
+├── architecture.investigated.drawio       # Bản có highlight tích lũy
+├── module_summary.md
+├── stack_architecture.md
 ├── frontend_architecture.drawio
+├── frontend_architecture.investigated.drawio
 ├── backend_architecture.drawio
+├── backend_architecture.investigated.drawio
 ├── fe_be_architecture.drawio
-├── frontend_reference.drawio          # Reference roles khớp source
+├── fe_be_architecture.investigated.drawio
+├── frontend_reference.drawio
+├── frontend_reference.investigated.drawio
 ├── backend_reference.drawio
-├── suggested_investigations.md        # Tối đa 20 câu hỏi, 2 nhóm
-├── middle-files\
-│   ├── architecture.json
-│   ├── module_summary.json
-│   ├── stack_architecture.json
-│   ├── code_intelligence.sqlite
-│   ├── suggested_investigations.json
-│   └── .module_summary_cache\         # Khi dùng --ai-summary
-└── investigations\                    # Chỉ khi dùng --auto-investigate-top
-    ├── INV-001.json
-    ├── INV-002.json
-    └── manifest.json
+├── backend_reference.investigated.drawio
+├── suggested_investigations.md
+├── investigations\
+│   ├── index.md                          # Tự sinh khi dùng --auto-investigate-top
+│   ├── INV-001\
+│   │   ├── result.md                     # Kết luận + file:line + bước điều tra
+│   │   ├── investigation.drawio          # Sơ đồ chỉ có evidence thật
+│   │   └── investigation.svg             # Preview bên trong result.md
+│   └── INV-Q-<hash>\                     # Câu hỏi chạy bằng investigate trực tiếp
+│       ├── result.md
+│       ├── investigation.drawio
+│       └── investigation.svg
+└── middle-files\
+    ├── architecture.json
+    ├── stack_architecture.json
+    ├── module_summary.json
+    ├── code_intelligence.sqlite
+    ├── suggested_investigations.json
+    ├── investigation_annotations.json    # Các highlight tích lũy
+    ├── investigations\
+    │   ├── INV-001.json                  # Kết quả máy đọc
+    │   ├── INV-001.evidence.csv
+    │   └── manifest.json
+    ├── drawio-baselines\                  # Chỉ khi dùng --overwrite-drawio
+    └── .module_summary_cache\
 ```
 
-Các file `.drawio` có thể mở bằng [diagrams.net](https://app.diagrams.net) → **File → Open From → Device**. Box FE/BE/DB được tô màu; các cạnh Reference dạng nét đứt biểu diễn gợi ý cấu trúc, **không phải lời gọi runtime đã được chứng minh**.
+File `.investigated.drawio` chỉ được tạo khi bản `.drawio` gốc tương ứng đã tồn tại. Nếu chỉ chạy `intelligence` mà chưa chạy `architecture`, bạn vẫn có thể xuất sơ đồ riêng cho câu hỏi, nhưng chưa thể chú thích sơ đồ kiến trúc chưa có.
 
-Ngoài ra, chỉ mục tìm kiếm FTS của các lệnh `index`/`chat`/`design` được quản lý riêng trong `%USERPROFILE%\.local_code_agent\index\` (khác với `middle-files\code_intelligence.sqlite`).
+**Ý nghĩa màu sắc:** Box theo tầng FE/BE/DB; viền xanh là node liên quan đến bằng chứng; đầu mũi tên xanh chỉ xuất hiện nếu có **cạnh tĩnh đúng giữa các file được dẫn chứng**. Nét đứt trong Reference tiếp tục biểu thị cấu trúc tham khảo, không phải runtime call. Sơ đồ không tự nối FE → BE → SQL nếu thiếu bằng chứng quan hệ.
+
+**Các tùy chọn của `investigate` và `architecture --auto-investigate-top N`:**
+
+| Cờ | Tác dụng |
+|---|---|
+| `--no-markdown` | Không tạo Markdown cho từng investigation (không ảnh hưởng `architecture.md`) |
+| `--no-diagram` | Không sinh `investigation.drawio` riêng |
+| `--no-update-drawio` | Không cập nhật bản `.investigated.drawio` |
+| `--diagram-type auto\|flow\|impact\|symbol` | Chọn hướng bố trí sơ đồ; không thay đổi các liên kết từ source |
+| `--overwrite-drawio` | Ghi đè `.drawio` gốc **chỉ khi chủ động yêu cầu**, backup ở `middle-files/drawio-baselines/` |
+
+Mở Draw.io tại [diagrams.net](https://app.diagrams.net) → File → Open From → Device. Các file `.drawio` vẫn có thể chỉnh sửa từng node.
+
+Chỉ mục SQLite phục vụ `index`, `chat`, `design` còn được quản lý riêng ở `%USERPROFILE%\.local_code_agent\index\`, khác với `middle-files\code_intelligence.sqlite`.
 
 ## 6. Agent điều tra như thế nào?
 
@@ -273,7 +316,7 @@ py -3 agent.py --project "D:\Work\LegacyProject" --model qwen3:8b --num-ctx 2048
 | `Code intelligence index absent` | Chạy `architecture` hoặc `intelligence` với **đúng `--out`** |
 | Source đã thay đổi nhưng index chưa nhận | Chạy lại `intelligence`/`architecture`; nếu timestamp/size không đổi, cân nhắc xây lại riêng index |
 | Không tìm thấy evidence | Kiểm tra tên class, mapper/config bị bỏ qua; mở kết quả `symbol`, `flows`, `search` để đối chiếu |
-| Một auto investigation lỗi | Mở `investigations/manifest.json` và file `INV-xxx.json`; các câu còn lại vẫn có thể được chạy |
+| Một auto investigation lỗi | Mở `middle-files/investigations/manifest.json` và `middle-files/investigations/INV-xxx.json`; các câu còn lại vẫn có thể được chạy |
 | File Draw.io có đường chéo hoặc chồng nhau | Dữ liệu graph lớn có thể vượt khả năng layout mặc định; sắp xếp lại trong diagrams.net |
 
 Chạy bộ test từ thư mục chứa `agent.py`:
@@ -286,6 +329,7 @@ py -3 -m unittest discover -s tests -v
 
 ## 9. Tài liệu chuyên sâu
 
+- [v4.14 — Investigation Reports & Annotated Draw.io](README_V414.md): Markdown, sơ đồ chứng cứ, cập nhật kiến trúc và `middle-files/`.
 - [v4.13 — Suggested Investigations](README_V413.md): Top 20, hai nhóm câu hỏi và `--auto-investigate-top`.
 - [v4.12 — Iterative Investigation](README_V412.md): Qwen chọn công cụ nhiều vòng, kiểm tra evidence.
 - [Code Intelligence](README_CODE_INTELLIGENCE.md): symbol, trace, impact, flows, history và vector search.
@@ -294,4 +338,4 @@ py -3 -m unittest discover -s tests -v
 - [Draw.io Layout v4.8](README_V48.md): lane, nhóm framework, màu và đường nối.
 - [Legacy v4 / Full Repository Scan](README_V4.md): các workflow `design`, `overview` và checkpoint lịch sử.
 
-> **README này là hướng dẫn sử dụng chính cho v4.13.** Các tài liệu theo phiên bản được giữ làm chi tiết kỹ thuật hoặc lịch sử thay đổi; khi ví dụ cũ xung đột với CLI hiện tại, ưu tiên `py -3 agent.py --help` và trợ giúp của từng lệnh.
+> **README này là hướng dẫn sử dụng chính cho v4.14.** Các tài liệu theo phiên bản được giữ làm chi tiết kỹ thuật hoặc lịch sử thay đổi; khi ví dụ cũ xung đột với CLI hiện tại, ưu tiên `py -3 agent.py --help` và trợ giúp của từng lệnh.

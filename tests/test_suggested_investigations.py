@@ -62,13 +62,17 @@ public class OrderController { public void submitOrder() { } }
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);src=self._project(root)
             with patch('agent.print_ram_status'), patch('agent.Ollama') as model, \
-                 patch('suggested_investigations.investigate',return_value={'answer':'Evidence only'}) as run, \
+                 patch('suggested_investigations.investigate',return_value={
+                     'answer':'Evidence only', 'source_citations':['OrderService.java:1'],
+                     'answer_status':'qwen-grounded-attempt'}) as run, \
                  redirect_stdout(io.StringIO()):
                 self.assertEqual(main(['--project',str(src),'architecture','--auto-investigate-top','2',
                                        '--out',str(root/'out')]),0)
             self.assertEqual(run.call_count,2)
-            self.assertEqual(json.loads((root/'out'/'investigations'/'manifest.json').read_text())['executed'],2)
-            self.assertTrue((root/'out'/'investigations'/'INV-002.json').exists())
+            self.assertEqual(json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text())['executed'],2)
+            self.assertTrue((root/'out'/'middle-files'/'investigations'/'INV-002.json').exists())
+            self.assertTrue((root/'out'/'investigations'/'INV-002'/'result.md').exists())
+            self.assertTrue((root/'out'/'investigations'/'INV-002'/'investigation.drawio').exists())
 
     def test_auto_top_failure_is_visible(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -78,7 +82,7 @@ public class OrderController { public void submitOrder() { } }
                  redirect_stdout(io.StringIO()):
                 self.assertEqual(main(['--project',str(src),'architecture','--auto-investigate-top','1',
                                        '--out',str(root/'out')]),2)
-            manifest=json.loads((root/'out'/'investigations'/'manifest.json').read_text())
+            manifest=json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text())
             self.assertEqual(manifest['successful'],0)
             self.assertEqual(manifest['results'][0]['status'],'failed')
 

@@ -32,6 +32,18 @@ def main(argv=None):
     s.add_argument('question'); s.add_argument('--budget',type=int,default=1200)
     s.add_argument('--max-steps',type=int,default=4,help='Maximum read-only tool investigation steps (1-6)')
     s.add_argument('--non-ai',action='store_true',help='Disable Qwen and use local lexical evidence retrieval only')
+    for command_name in ('architecture', 'investigate'):
+        target = sub.choices[command_name]
+        target.add_argument('--no-markdown', action='store_true',
+                            help='Skip Markdown output for individual investigations (not architecture.md)')
+        target.add_argument('--no-diagram', action='store_true',
+                            help='Skip each individual investigation.drawio')
+        target.add_argument('--no-update-drawio', action='store_true',
+                            help='Do not generate annotated versions of the architecture diagrams')
+        target.add_argument('--overwrite-drawio', action='store_true',
+                            help='Explicitly update original Draw.io files; backups in middle-files/drawio-baselines')
+        target.add_argument('--diagram-type', choices=('auto', 'flow', 'impact', 'symbol'),
+                            default='auto', help='Evidence-diagram type (never invents execution links)')
     s = sub.add_parser('symbol',help='Symbol declarations and references from local intelligence index')
     s.add_argument('name')
     s = sub.add_parser('trace',help='Candidate caller-callee and static dependency graph')
@@ -68,6 +80,8 @@ def main(argv=None):
     a = p.parse_args(argv)
     print_ram_status()
     try:
+        if a.command in ('architecture','investigate') and a.no_update_drawio and a.overwrite_drawio:
+            raise ValueError('--overwrite-drawio cannot be combined with --no-update-drawio')
         repo = Repo(a.project)
         if a.command=='index': print(json.dumps(repo.index(),ensure_ascii=False,indent=2));return 0
         if a.command=='architecture':
@@ -87,7 +101,10 @@ def main(argv=None):
             if a.auto_investigate_top:
                 ai = llm or Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx)
                 result['auto_investigation'] = auto_investigate(repo,a.out,candidates,
-                    a.auto_investigate_top,ai)
+                    a.auto_investigate_top,ai,
+                    markdown=not a.no_markdown, diagram=not a.no_diagram,
+                    update_drawio=not a.no_update_drawio,
+                    overwrite_drawio=a.overwrite_drawio, diagram_type=a.diagram_type)
                 if result['auto_investigation']['successful'] != result['auto_investigation']['executed']:
                     print(json.dumps(result,ensure_ascii=False,indent=2));return 2
             print(json.dumps(result,ensure_ascii=False,indent=2));return 0
@@ -108,6 +125,31 @@ def main(argv=None):
             else:
                 llm=None if a.non_ai else Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx)
                 result=investigate(repo,a.question,llm,budget=a.budget,max_steps=a.max_steps)
+                from investigation_report import write_investigation
+                effective_status='insufficient-evidence' if result.get('answer_status')=='insufficient-evidence' else 'completed'
+                output=write_investigation(repo,a.out,result,question=a.question,status=effective_status,
+                    markdown=not a.no_markdown,diagram=not a.no_diagram,
+                    update_drawio=not a.no_update_drawio,overwrite_drawio=a.overwrite_drawio,
+                    diagram_type=a.diagram_type)
+                # The terminal is human-readable. Raw investigation JSON lives under middle-files.
+                print('\n=== Investigation result ===')
+                print('Status:',output['status'])
+                print('Question:',a.question)
+                if result.get('answer'):
+                    print('\n'+str(result['answer']))
+                elif result.get('source_excerpts'):
+                    print('\nLexical search evidence (no AI inference):')
+                    for excerpt in result['source_excerpts'][:6]:print(' -',str(excerpt)[:300])
+                else:
+                    print('No answer or source evidence found. See report and status.')
+                if output.get('markdown'):print('\nMarkdown:',output['markdown'])
+                if output.get('investigation_drawio'):print('Draw.io:',output['investigation_drawio'])
+                if output.get('architecture_diagrams'):
+                    updated=[x['diagram'] for x in output['architecture_diagrams'] if x.get('status')=='updated']
+                    if updated: print('Annotated architecture diagrams:',len(updated),'(kept originals)')
+                    else:print('Annotated architecture: no existing base Draw.io found; run architecture first.')
+                print('Technical JSON:',output['json'])
+                return 0
             print(json.dumps(result,ensure_ascii=False,indent=2));return 0
         if a.command=='search': print(repo.search_code(a.query, a.pattern, a.limit));return 0
         if a.command=='refs': print(repo.find_symbol(a.symbol));return 0

@@ -153,25 +153,61 @@ def suggest_investigations(repo, out='output/architecture', top=20):
             'candidates': selected}
 
 
-def auto_investigate(repo, out, candidates, top, llm, budget=1200, max_steps=4):
-    """Run only selected questions. Save each result so partial runs remain auditable."""
+def auto_investigate(repo, out, candidates, top, llm, budget=1200, max_steps=4,
+                     *, markdown=True, diagram=True, update_drawio=True,
+                     overwrite_drawio=False, diagram_type='auto'):
+    """Run selected source-backed questions and export readable reports + diagrams."""
     if not 1 <= top <= 20:
         raise ValueError('--auto-investigate-top must be 1..20')
-    dest = Path(out).expanduser().resolve() / 'investigations'
-    dest.mkdir(parents=True, exist_ok=True)
+    from investigation_report import write_investigation
+    output = Path(out).expanduser().resolve()
+    dest = output / 'investigations'
+    middle = output / 'middle-files' / 'investigations'
+    dest.mkdir(parents=True,exist_ok=True)
+    middle.mkdir(parents=True,exist_ok=True)
     results = []
     for item in candidates[:top]:
+        status = 'completed'
+        error = None
         try:
             response = investigate(repo, item['question'], llm, budget=budget, max_steps=max_steps)
-            record = {'id': item['id'], 'question': item['question'], 'status': 'completed',
-                      'source_evidence': item['source_evidence'], 'result': response}
+            if response.get('answer_status') == 'insufficient-evidence':
+                status = 'insufficient-evidence'
         except Exception as exc:
-            # Distinguish individual failure from a verified answer; preserve remaining work.
-            record = {'id': item['id'], 'question': item['question'], 'status': 'failed',
-                      'error': str(exc)[:300]}
-        (dest / f'{item["id"]}.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
-        results.append({'id': item['id'], 'status': record['status'], 'file':str(dest / f'{item["id"]}.json')})
-    manifest = {'requested': top, 'executed': len(results), 'successful': sum(x['status']=='completed' for x in results),
-                'results': results}
-    (dest / 'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+            status = 'failed'
+            error = str(exc)[:300]
+            response = {'question':item['question'], 'answer_status':'execution-failed',
+                        'answer':'Không có kết luận do lần điều tra bị lỗi.', 'tool_errors':[error]}
+        try:
+            report = write_investigation(repo, output, response,
+                investigation_id=item['id'], question=item['question'],
+                status=status, error=error, seed_refs=item.get('source_evidence') or [],
+                markdown=markdown, diagram=diagram, update_drawio=update_drawio,
+                overwrite_drawio=overwrite_drawio, diagram_type=diagram_type)
+            status = report['status']
+        except Exception as exc:
+            # Report failure itself must be visible; do not claim successful investigation.
+            status = 'failed'
+            error = 'Failed to write report: '+str(exc)[:250]
+            report = {}
+        results.append({'id':item['id'], 'status':status, 'question':item['question'],
+                        'markdown':report.get('markdown'), 'diagram':report.get('investigation_drawio'),
+                        'json':report.get('json'), 'error':error})
+    manifest = {'requested':top, 'executed':len(results),
+                'successful':sum(x['status']=='completed' for x in results), 'results':results}
+    (middle/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+    if markdown:
+        lines=['# Auto Investigation Results', '',
+               f'Completed: **{manifest["successful"]} / {manifest["executed"]}**', '',
+               '| ID | Result | Question | Report | Diagram |',
+               '|---|---|---|---|---|']
+        for entry in results:
+            report_link=f'[Đọc báo cáo]({entry["id"]}/result.md)' if entry.get('markdown') else '—'
+            diagram_link=f'[Draw.io]({entry["id"]}/investigation.drawio)' if entry.get('diagram') else '—'
+            question=entry['question'].replace('|','\\|').replace('\n',' ')
+            lines.append(f'| {entry["id"]} | {entry["status"]} | {question} | {report_link} | {diagram_link} |')
+        lines+=['','Raw JSON/CSV and machine manifest: `../middle-files/investigations/`.','']
+        (dest/'index.md').write_text('\n'.join(lines),encoding='utf-8')
+    elif (dest/'index.md').is_file():
+        (dest/'index.md').unlink()
     return manifest
