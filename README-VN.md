@@ -1,6 +1,6 @@
 # Local AI Code Investigation Agent
 
-**v4.16.2 · Phân tích codebase bằng AI cục bộ · Python + Ollama · Windows / VS Code · Chỉ đọc source**
+**v4.17 · Phân tích codebase bằng AI cục bộ · Python + Ollama · Windows / VS Code · Chỉ đọc source**
 
 **Ngôn ngữ:** [English](README.md) · Tiếng Việt
 
@@ -12,7 +12,14 @@ Mở PowerShell tại thư mục chứa `agent.py`, sau đó thay hai đường 
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --out "D:\AgentOutput\architecture"
 ```
 
-**Lệnh này làm gì?** Quét source → tạo sơ đồ kiến trúc FE/BE/DB → sinh tối đa **20 câu hỏi có bằng chứng source** → dùng Qwen local xếp hạng → điều tra **Top 5** → xuất Markdown/SVG/Draw.io theo từng câu → tổng hợp báo cáo toàn hệ thống. Mọi file trung gian, checkpoint và log nằm trong `middle-files/`.
+**Lệnh này làm gì?** Quét source → tạo sơ đồ kiến trúc FE/BE/DB → sinh tối đa **20 câu hỏi có bằng chứng source** → dùng Qwen local xếp hạng → điều tra **Top 5** → xuất HTML/SVG/Draw.io theo từng câu → tổng hợp báo cáo toàn hệ thống. Mọi file trung gian, checkpoint và log nằm trong `middle-files/`.
+
+**Mặc định xuất HTML** để mở ngay trên trình duyệt (`system_knowledge_report.html`). Python đưa nội dung vào template HTML có sẵn nên **không phát sinh thêm token Ollama để làm giao diện**. Muốn lấy Markdown, thêm `--report-format md`; muốn cả hai, chọn `--report-format both`. Draw.io sẽ tách điểm neo đầu/đuôi mũi tên trên từng box, chỉ dùng chung khi các vị trí còn trống đã hết.
+
+```powershell
+# Xuất cả HTML lẫn Markdown
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --report-format both --out "D:\AgentOutput\architecture"
+```
 
 **Muốn chạy toàn bộ câu hỏi đã sinh (tối đa 20):**
 
@@ -22,7 +29,7 @@ py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate
 
 `max` nghĩa là chạy **tất cả câu hỏi hợp lệ thực sự được sinh**, không nhất thiết đủ 20. Giới hạn mặc định là 160 lượt gọi Ollama cho Top 5 và 370 cho `max`; đây là hạn mức trên, không phải số lượt bắt buộc sử dụng. Chạy toàn bộ trên project lớn có thể mất nhiều thời gian.
 
-**Nên mở file nào trước?** `system_knowledge_report.md` (báo cáo tổng thể), `suggested_investigations.md` (câu hỏi), `investigations/index.md` (mục lục điều tra), `system_knowledge.drawio` (sơ đồ có thể chỉnh sửa).
+**Nên mở file nào trước?** `system_knowledge_report.html` (báo cáo tổng thể), `suggested_investigations.html` (câu hỏi), `investigations/index.html` (mục lục điều tra), `system_knowledge.drawio` (sơ đồ có thể chỉnh sửa).
 
 ### Năm lệnh thường dùng nhất
 
@@ -109,7 +116,7 @@ py -3 agent.py --project ".\sample_project" architecture --out ".\output\sample-
 | `--non-review` | Bỏ các lượt phản biện bổ sung ở cả ba giai đoạn |
 | `--non-investigation-review` | Bỏ vòng review bằng chứng trong investigation |
 | `--non-synthesis-review` | Bỏ vòng review khi tổng hợp hệ thống |
-| `--non-markdown` | Không xuất Markdown cho từng investigation |
+| `--non-markdown` | Không xuất Markdown ở chế độ `md`; không tắt HTML trong chế độ HTML |
 | `--non-diagram` | Không tạo Draw.io riêng cho từng investigation |
 | `--non-update-drawio` | Không tạo bản sơ đồ kiến trúc có chú thích |
 
@@ -137,24 +144,24 @@ Một lần `investigate` mặc định có `--max-steps 4`, `--review-rounds 1`
 
 ```text
 D:\AgentOutput\architecture\
-├── architecture.md
+├── architecture.html
 ├── architecture.drawio
 ├── architecture.investigated.drawio
-├── module_summary.md
-├── stack_architecture.md
+├── module_summary.html
+├── stack_architecture.html
 ├── frontend_architecture.drawio
 ├── backend_architecture.drawio
 ├── fe_be_architecture.drawio
 ├── frontend_reference.drawio
 ├── backend_reference.drawio
-├── suggested_investigations.md
-├── system_knowledge_report.md
+├── suggested_investigations.html
+├── system_knowledge_report.html
 ├── system_knowledge.drawio
 ├── system_knowledge.svg
 ├── investigations\
-│   ├── index.md
+│   ├── index.html
 │   ├── INV-001\
-│   │   ├── result.md
+│   │   ├── result.html
 │   │   ├── investigation.drawio
 │   │   └── investigation.svg
 │   └── ...
@@ -166,11 +173,12 @@ D:\AgentOutput\architecture\
     ├── investigations\          # JSON / CSV chứng cứ / manifest
     ├── workflow\                # cấu hình / trạng thái / audit / cache
     ├── synthesis\               # claim / tóm tắt trung gian / checkpoint
+    ├── report-sources\          # Markdown trung gian khi mặc định xuất HTML
     ├── drawio-baselines\        # chỉ có nếu chủ động ghi đè sơ đồ gốc
     └── .module_summary_cache\
 ```
 
-Cây thư mục mang tính minh họa: **file chỉ xuất hiện khi giai đoạn tương ứng đã chạy và có kết quả**. Các sơ đồ FE/BE có thể có thêm bản `.investigated.drawio` nếu đã có sơ đồ kiến trúc phù hợp. Markdown/SVG/Draw.io dành cho người đọc nằm ở thư mục ngoài; mọi JSON/CSV/cache/checkpoint kỹ thuật nằm trong `middle-files/`.
+Cây thư mục mang tính minh họa: **file chỉ xuất hiện khi giai đoạn tương ứng đã chạy và có kết quả**. Các sơ đồ FE/BE có thể có thêm bản `.investigated.drawio` nếu đã có sơ đồ kiến trúc phù hợp. HTML/SVG/Draw.io dành cho người đọc nằm ở thư mục ngoài; Markdown trung gian để chạy tổng hợp lại nằm trong `middle-files/report-sources/`, cùng các JSON/CSV/cache/checkpoint.
 
 Mở `.drawio` bằng [diagrams.net](https://app.diagrams.net) hoặc extension tương thích của VS Code. Sơ đồ investigation chỉ thể hiện những quan hệ có bằng chứng tĩnh trong graph. Mặc định sơ đồ gốc được giữ nguyên; bản có chú thích mang hậu tố `.investigated.drawio`. Chỉ dùng `--overwrite-drawio` khi muốn ghi đè có chủ đích; backup được lưu ở `middle-files/drawio-baselines/`.
 
@@ -209,7 +217,7 @@ Source (Java / SQL / ActionScript / MXML / XML / cấu hình)
                                               |
                                  Tổng hợp phân cấp cục bộ
                                               |
-                         system_knowledge_report.md + Draw.io
+                         system_knowledge_report.html + Draw.io
 ```
 
 Python quản lý index, duyệt graph, bằng chứng `file:line`, checkpoint và điều kiện dừng. Qwen thực hiện các tác vụ lập kế hoạch, xếp hạng, diễn giải và tổng hợp nhỏ, có giới hạn số bước/context. Thiết kế nhiều vòng giúp xử lý hệ thống lớn mà không cần đưa toàn bộ source vào một prompt.
@@ -246,6 +254,7 @@ py -3 agent.py --project ".\sample_project" architecture --help
 
 Các tài liệu sau **giữ nguyên ngôn ngữ hiện tại**, không bị dịch hoặc thay thế trong lần chỉnh README này:
 
+- [v4.17 — HTML reports and distributed Draw.io ports](README_V417.md)
 - [v4.16 — Smart workflow defaults](README_V416.md)
 - [v4.16.1 — Performance hotfix](README_V4161_PERFORMANCE.md)
 - [v4.15 — Local multi-loop workflow](README_V415.md)
@@ -259,4 +268,4 @@ Các tài liệu sau **giữ nguyên ngôn ngữ hiện tại**, không bị d�
 - [v4.8 Draw.io Layout](README_V48.md)
 - [v4 Legacy](README_V4.md)
 
-**Bản hướng dẫn chính hiện tại: v4.16.2.** Khi tài liệu cũ mâu thuẫn với CLI hiện tại, ưu tiên `py -3 agent.py --help` và `--help` của lệnh tương ứng.
+**Bản hướng dẫn chính hiện tại: v4.17.** Khi tài liệu cũ mâu thuẫn với CLI hiện tại, ưu tiên `py -3 agent.py --help` và `--help` của lệnh tương ứng.

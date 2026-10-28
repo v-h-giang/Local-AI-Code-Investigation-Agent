@@ -39,7 +39,7 @@ class SmartDefaultsTest(unittest.TestCase):
         self.assertEqual(status, 0, log[-800:])
         manifest = json.loads((self.out / 'middle-files' / 'investigations' / 'manifest.json').read_text('utf-8'))
         self.assertEqual(manifest['requested'], 5)
-        self.assertTrue((self.out / 'system_knowledge_report.md').is_file())
+        self.assertTrue((self.out / 'system_knowledge_report.html').is_file())
         self.assertTrue((self.out / 'system_knowledge.drawio').is_file())
         self.assertTrue((self.out / 'system_knowledge.svg').is_file())
         self.assertIn('"max_llm_calls": 160', log)
@@ -54,7 +54,7 @@ class SmartDefaultsTest(unittest.TestCase):
         ranking = json.loads((self.out / 'middle-files' / 'suggested_investigations.json').read_text('utf-8'))
         self.assertEqual(ranking['ranking_method'], 'local-qwen-reviewed')
         self.assertGreater(manifest['executed'], 0)
-        self.assertTrue((self.out / 'investigations' / 'INV-001' / 'result.md').is_file())
+        self.assertTrue((self.out / 'investigations' / 'INV-001' / 'result.html').is_file())
         self.assertTrue((self.out / 'investigations' / 'INV-001' / 'investigation.drawio').is_file())
         self.assertFalse(any(self.out.glob('*.json')), 'Machine data belongs in middle-files')
 
@@ -63,8 +63,8 @@ class SmartDefaultsTest(unittest.TestCase):
             '--auto-investigate-top', '1', '--non-synthesize', '--non-ai-suggestions',
             '--non-review', '--non-markdown', '--non-diagram', '--non-update-drawio')
         self.assertEqual(status, 0, log[-800:])
-        self.assertFalse((self.out / 'system_knowledge_report.md').exists())
-        self.assertFalse((self.out / 'investigations' / 'INV-001' / 'result.md').exists())
+        self.assertFalse((self.out / 'system_knowledge_report.html').exists())
+        self.assertTrue((self.out / 'investigations' / 'INV-001' / 'result.html').exists())
         self.assertFalse((self.out / 'investigations' / 'INV-001' / 'investigation.drawio').exists())
         self.assertFalse((self.out / 'architecture.investigated.drawio').exists())
         self.assertTrue((self.out / 'middle-files' / 'investigations' / 'INV-001.json').exists())
@@ -102,22 +102,22 @@ class SmartDefaultsTest(unittest.TestCase):
         self.assertEqual(status, 0, log[-800:])
         self.assertIn('"auto_investigate_top": 1', log)
         self.assertIn('"max_llm_calls": 60', log)
-        self.assertTrue((self.out / 'system_knowledge_report.md').is_file())
+        self.assertTrue((self.out / 'system_knowledge_report.html').is_file())
 
     def test_static_architecture_does_not_start_ollama(self):
         with patch('agent.print_ram_status'), patch('agent.Ollama', side_effect=AssertionError('should not call Ollama')), \
              redirect_stdout(io.StringIO()):
             status = main(['--project', str(self.src), 'architecture', '--out', str(self.out)])
         self.assertEqual(status, 0)
-        self.assertTrue((self.out / 'suggested_investigations.md').is_file())
-        self.assertFalse((self.out / 'system_knowledge_report.md').exists())
+        self.assertTrue((self.out / 'suggested_investigations.html').is_file())
+        self.assertFalse((self.out / 'system_knowledge_report.html').exists())
 
     def test_non_synthesis_works_with_optional_n_without_value(self):
         status, log = self.run_cli('--auto-investigate-top', '--non-synthesize')
         self.assertEqual(status, 0, log[-800:])
         self.assertIn('"auto_investigate_top": 5', log)
         self.assertIn('"synthesize": false', log)
-        self.assertFalse((self.out / 'system_knowledge_report.md').exists())
+        self.assertFalse((self.out / 'system_knowledge_report.html').exists())
 
     def test_invalid_top_rejected(self):
         status, log = self.run_cli('--auto-investigate-top', '21')

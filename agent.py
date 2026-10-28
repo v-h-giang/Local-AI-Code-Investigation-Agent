@@ -67,6 +67,10 @@ def main(argv=None):
     s.add_argument('--review-rounds',type=int,default=2,help='Final local evidence-review passes (0-2)')
     s.add_argument('--max-llm-calls',type=int,default=80,help='Hard limit for Ollama calls')
     s.add_argument('--fresh',action='store_true',help='Ignore previous synthesis checkpoints')
+    for report_command in ('architecture', 'investigate', 'synthesize'):
+        sub.choices[report_command].add_argument('--report-format',
+            choices=('html','md','both'),default='html',
+            help='Human-readable reports: html (default), md, or both')
     s = sub.add_parser('symbol',help='Symbol declarations and references from local intelligence index')
     s.add_argument('name')
     s = sub.add_parser('trace',help='Candidate caller-callee and static dependency graph')
@@ -114,6 +118,13 @@ def main(argv=None):
             a.synthesis_review_rounds = 0
         if a.max_llm_calls is None:
             a.max_llm_calls = (160 + max(0, a.auto_investigate_top - 5) * 14) if a.auto_investigate_top > 0 else 80
+    report_session = None
+    if a.command in ('architecture','investigate','synthesize'):
+        from report_render import ReportSession
+        # HTML-only runs preserve Markdown evidence in middle-files and restore
+        # it before reuse by architecture cache or hierarchical synthesis.
+        report_session = ReportSession(a.out,a.report_format)
+        report_session.restore()
     print_ram_status()
     try:
         if a.command in ('architecture','investigate','synthesize') and not 1 <= a.max_llm_calls <= 5000:
@@ -139,6 +150,7 @@ def main(argv=None):
             if a.auto_investigate_top:
                 workflow_settings={
                     'auto_investigate_top':a.auto_investigate_top,
+                    'report_format':a.report_format,
                     'local_ai_question_ranking':not a.no_ai_suggestions,
                     'question_review_rounds':a.question_review_rounds if not a.no_ai_suggestions else 0,
                     'investigation_review_rounds':a.investigation_review_rounds,
@@ -178,7 +190,7 @@ def main(argv=None):
             if a.auto_investigate_top:
                 result['auto_investigation'] = auto_investigate(repo,a.out,candidates,
                     a.auto_investigate_top,workflow_llm,review_rounds=a.investigation_review_rounds,
-                    markdown=not a.no_markdown, diagram=not a.no_diagram,
+                    markdown=(not a.no_markdown or a.report_format!='md'), diagram=not a.no_diagram,
                     update_drawio=not a.no_update_drawio,
                     overwrite_drawio=a.overwrite_drawio, diagram_type=a.diagram_type)
                 failed=(result['auto_investigation']['successful'] != result['auto_investigation']['executed'])
@@ -193,6 +205,9 @@ def main(argv=None):
             if a.auto_investigate_top:
                 result['workflow_settings']=workflow_settings
             if workflow_llm:result['workflow_usage']=workflow_llm.usage()
+            report_session.finalize()
+            result=report_session.report_paths(result)
+            result['report_format']=a.report_format
             print(json.dumps(result,ensure_ascii=False,indent=2));return 2 if failed else 0
         if a.command=='synthesize':
             if not 0 <= a.review_rounds <= 2:raise ValueError('--review-rounds must be 0..2')
@@ -204,6 +219,9 @@ def main(argv=None):
             from local_workflow import WorkflowState
             WorkflowState(a.out).record('synthesis',result['status'] if result['status'] in ('completed','partial','failed') else 'partial',report=result.get('report'))
             result['workflow_usage']=llm.usage()
+            report_session.finalize()
+            result=report_session.report_paths(result)
+            result['report_format']=a.report_format
             print(json.dumps(result,ensure_ascii=False,indent=2))
             return 0 if result['status']=='completed' else 2
         if a.command in ('intelligence','investigate','symbol','trace','impact','clusters','flows','history','diff-impact','vectorize','semantic'):
@@ -230,10 +248,12 @@ def main(argv=None):
                 from investigation_report import write_investigation
                 effective_status='insufficient-evidence' if result.get('answer_status')=='insufficient-evidence' else 'completed'
                 output=write_investigation(repo,a.out,result,question=a.question,status=effective_status,
-                    markdown=not a.no_markdown,diagram=not a.no_diagram,
+                    markdown=(not a.no_markdown or a.report_format!='md'),diagram=not a.no_diagram,
                     update_drawio=not a.no_update_drawio,overwrite_drawio=a.overwrite_drawio,
                     diagram_type=a.diagram_type)
                 # The terminal is human-readable. Raw investigation JSON lives under middle-files.
+                report_session.finalize()
+                output=report_session.report_paths(output)
                 print('\n=== Investigation result ===')
                 print('Status:',output['status'])
                 print('Question:',a.question)
@@ -244,6 +264,7 @@ def main(argv=None):
                     for excerpt in result['source_excerpts'][:6]:print(' -',str(excerpt)[:300])
                 else:
                     print('No answer or source evidence found. See report and status.')
+                if output.get('html'):print('\nHTML:',output['html'])
                 if output.get('markdown'):print('\nMarkdown:',output['markdown'])
                 if output.get('investigation_drawio'):print('Draw.io:',output['investigation_drawio'])
                 if output.get('architecture_diagrams'):
@@ -294,6 +315,10 @@ def main(argv=None):
             return 0
     except (OllamaError,ValueError,OSError,KeyboardInterrupt) as e:
         print('ERROR:',e,file=sys.stderr);return 1
+    finally:
+        if report_session is not None:
+            # Also publish partial results if a later stage raises an error.
+            report_session.finalize()
     return 0
 
 if __name__=='__main__':

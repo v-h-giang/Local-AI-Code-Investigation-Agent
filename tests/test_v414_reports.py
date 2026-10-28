@@ -196,7 +196,7 @@ class InvestigationReportTests(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(main(args),0)
         printed=output.getvalue()
-        self.assertIn('Markdown:',printed)
+        self.assertIn('HTML:',printed)
         self.assertIn('OrderService',printed)
         self.assertNotIn('"steps":',printed)
         self.assertIn('middle-files',printed)

@@ -136,9 +136,9 @@ class V415WorkflowsTest(unittest.TestCase):
         self.assertEqual(status,0,output.getvalue()[-500:])
         self.assertTrue((self.out/'middle-files'/'investigations'/'manifest.json').exists())
         self.assertTrue((self.out/'middle-files'/'workflow'/'call_audit.jsonl').exists())
-        self.assertTrue((self.out/'system_knowledge_report.md').exists())
+        self.assertTrue((self.out/'system_knowledge_report.html').exists())
         self.assertTrue(any(x['kind']=='investigation' for x in gather_evidence(self.repo,self.out)['records']))
-        self.assertTrue((self.out/'investigations'/'INV-001'/'result.md').exists())
+        self.assertTrue((self.out/'investigations'/'INV-001'/'result.html').exists())
 
 
 if __name__=='__main__':unittest.main()

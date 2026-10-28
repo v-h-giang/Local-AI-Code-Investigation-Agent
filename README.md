@@ -1,6 +1,6 @@
 # Local AI Code Investigation Agent
 
-**v4.16.2 · Local-first codebase intelligence · Python + Ollama · Windows / VS Code · Read-only source analysis**
+**v4.17 · Local-first codebase intelligence · Python + Ollama · Windows / VS Code · Read-only source analysis**
 
 **Language:** English · [Tiếng Việt](README-VN.md)
 
@@ -12,7 +12,14 @@ Open PowerShell in the repository folder (where `agent.py` lives). Replace the t
 py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top --out "D:\AgentOutput\architecture"
 ```
 
-**What it does:** scans the repository → produces architecture/FE–BE–DB diagrams → generates up to **20 source-backed questions** → uses local Qwen to rank them → investigates the **Top 5** → produces readable Markdown/SVG/Draw.io reports → synthesizes a system-level report. Intermediate files, checkpoints and logs live under `middle-files/`.
+**What it does:** scans the repository → produces architecture/FE–BE–DB diagrams → generates up to **20 source-backed questions** → uses local Qwen to rank them → investigates the **Top 5** → produces readable HTML/SVG/Draw.io reports → synthesizes a system-level report. Intermediate files, checkpoints and logs live under `middle-files/`.
+
+**Default reports are HTML** (open `system_knowledge_report.html` in your browser). The agent renders a bundled HTML template with Python, **without extra Ollama calls or AI-generated HTML**. To change the output format, add `--report-format md` or `--report-format both` after the command name; `html` is the default. Draw.io arrows attach to independently distributed ports on each box, reusing a port only when the available perimeter slots are exhausted.
+
+```powershell
+# Generate Markdown and HTML together
+py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate-top max --report-format both --out "D:\AgentOutput\architecture"
+```
 
 **Investigate every generated question (up to 20):**
 
@@ -22,7 +29,7 @@ py -3 agent.py --project "D:\Work\LegacyProject" architecture --auto-investigate
 
 `max` means **all valid generated questions**, not necessarily 20. The default local Ollama call budget is 160 for Top 5 and 370 for `max`; these are limits, not target call counts. Processing a large repository or running all investigations can take substantial time.
 
-**Read these files first:** `system_knowledge_report.md` (system summary), `suggested_investigations.md` (ranked questions), `investigations/index.md` (investigation reports), and `system_knowledge.drawio` (editable diagram).
+**Read these files first:** `system_knowledge_report.html` (system summary), `suggested_investigations.html` (ranked questions), `investigations/index.html` (investigation reports), and `system_knowledge.drawio` (editable diagram).
 
 ### Five everyday commands
 
@@ -111,7 +118,7 @@ The full automatic workflow enables its recommended stages by default. Disable o
 | `--non-review` | Skip extra critique passes across ranking, investigation and synthesis |
 | `--non-investigation-review` | Skip the investigation evidence reviewer |
 | `--non-synthesis-review` | Skip final synthesis review |
-| `--non-markdown` | Skip individual investigation Markdown reports |
+| `--non-markdown` | Skip individual Markdown reports in `md` mode; HTML remains available in HTML mode |
 | `--non-diagram` | Skip individual investigation Draw.io diagrams |
 | `--non-update-drawio` | Skip annotated versions of architecture diagrams |
 
@@ -139,24 +146,24 @@ A single investigation defaults to `--max-steps 4`, `--review-rounds 1`, and `--
 
 ```text
 D:\AgentOutput\architecture\
-├── architecture.md
+├── architecture.html
 ├── architecture.drawio
 ├── architecture.investigated.drawio
-├── module_summary.md
-├── stack_architecture.md
+├── module_summary.html
+├── stack_architecture.html
 ├── frontend_architecture.drawio
 ├── backend_architecture.drawio
 ├── fe_be_architecture.drawio
 ├── frontend_reference.drawio
 ├── backend_reference.drawio
-├── suggested_investigations.md
-├── system_knowledge_report.md
+├── suggested_investigations.html
+├── system_knowledge_report.html
 ├── system_knowledge.drawio
 ├── system_knowledge.svg
 ├── investigations\
-│   ├── index.md
+│   ├── index.html
 │   ├── INV-001\
-│   │   ├── result.md
+│   │   ├── result.html
 │   │   ├── investigation.drawio
 │   │   └── investigation.svg
 │   └── ...
@@ -168,11 +175,12 @@ D:\AgentOutput\architecture\
     ├── investigations\          # technical JSON / evidence CSV / manifest
     ├── workflow\                # settings / state / audit / LLM cache
     ├── synthesis\               # claims / intermediate summaries / checkpoints
+    ├── report-sources\          # Markdown inputs cached when HTML-only
     ├── drawio-baselines\        # only if overwriting original diagrams
     └── .module_summary_cache\
 ```
 
-This is an illustrative tree; **files only appear when the corresponding stage is enabled and has output**. Some FE/BE diagrams also have `.investigated.drawio` variants when a source-matched architecture diagram exists. Human-facing reports/diagrams stay outside `middle-files/`; machine-readable intermediates go inside it.
+This is an illustrative tree; **files only appear when the corresponding stage is enabled and has output**. Some FE/BE diagrams also have `.investigated.drawio` variants when a source-matched architecture diagram exists. Human-facing HTML reports/diagrams stay outside `middle-files/`; raw Markdown used for later synthesis is retained under `middle-files/report-sources/` in HTML-only mode.
 
 To open and edit `.drawio` files, use [diagrams.net](https://app.diagrams.net) or a compatible VS Code extension. Investigation diagrams only show relationships supported by available static graph evidence. By default, original architecture diagrams are preserved; annotated copies use `.investigated.drawio`. `--overwrite-drawio` is an explicit opt-in that backs up originals under `middle-files/drawio-baselines/`.
 
@@ -211,7 +219,7 @@ Source files (Java / SQL / ActionScript / MXML / XML / configuration)
                                               |
                               hierarchical local synthesis
                                               |
-                          system_knowledge_report.md + Draw.io
+                          system_knowledge_report.html + Draw.io
 ```
 
 Python handles indexing, graph traversal, file/line evidence, checkpoints and stopping conditions. Qwen handles short planning, ranking, interpretation and summarization tasks. The software uses a bounded, local multi-loop workflow rather than attempting to stuff an entire codebase into one prompt.
@@ -248,6 +256,7 @@ py -3 agent.py --project ".\sample_project" architecture --help
 
 These documents remain in their existing languages and are **not replaced or translated** by this README:
 
+- [v4.17 — HTML reports and distributed Draw.io ports](README_V417.md)
 - [v4.16 — Smart workflow defaults](README_V416.md)
 - [v4.16.1 — Performance hotfix](README_V4161_PERFORMANCE.md)
 - [v4.15 — Local multi-loop workflow](README_V415.md)
@@ -261,4 +270,4 @@ These documents remain in their existing languages and are **not replaced or tra
 - [v4.8 Draw.io layouts](README_V48.md)
 - [v4 legacy overview/design workflow](README_V4.md)
 
-**Current guide:** v4.16.2. If older version notes conflict with the current CLI, use `py -3 agent.py --help` and the command-specific `--help` output as the source of truth.
+**Current guide:** v4.17. If older version notes conflict with the current CLI, use `py -3 agent.py --help` and the command-specific `--help` output as the source of truth.

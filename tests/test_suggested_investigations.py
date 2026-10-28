@@ -56,7 +56,7 @@ public class OrderController { public void submitOrder() { } }
             with patch('agent.print_ram_status'), patch('agent.Ollama') as llm, redirect_stdout(io.StringIO()):
                 self.assertEqual(main(['--project',str(src),'architecture','--out',str(root/'out')]),0)
                 llm.assert_not_called()
-            self.assertTrue((root/'out'/'suggested_investigations.md').exists())
+            self.assertTrue((root/'out'/'suggested_investigations.html').exists())
 
     def test_auto_top_executes_only_requested_and_persists(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -71,7 +71,7 @@ public class OrderController { public void submitOrder() { } }
             self.assertEqual(run.call_count,2)
             self.assertEqual(json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text())['executed'],2)
             self.assertTrue((root/'out'/'middle-files'/'investigations'/'INV-002.json').exists())
-            self.assertTrue((root/'out'/'investigations'/'INV-002'/'result.md').exists())
+            self.assertTrue((root/'out'/'investigations'/'INV-002'/'result.html').exists())
             self.assertTrue((root/'out'/'investigations'/'INV-002'/'investigation.drawio').exists())
 
     def test_auto_top_failure_is_visible(self):
