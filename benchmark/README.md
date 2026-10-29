@@ -38,6 +38,10 @@ From project root on Windows (PowerShell):
 py -3 benchmark/run.py --list
 py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30
 py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --resume
+# After a previous failed run: recover machine JSON without rerunning Qwen
+py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --resume
+# Only retry the cases still missing a machine result (will invoke Qwen)
+py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --resume --retry-failed
 ```
 
 Short offline-LLM baseline (requires downloaded source checkout but no Ollama):
@@ -71,3 +75,7 @@ Remove-Item -Recurse -Force .\benchmark
 ```
 
 The main app continues to work as before; its source and test files are unchanged by this integration.
+
+## Windows Japanese locale troubleshooting
+
+The runner now forces `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` for the `agent.py` child process. This prevents CP932 redirected stdout from rejecting Vietnamese Unicode text. Old `failed` records may have usable `middle-files/investigations/*.json` even if stdout printing failed. `--resume` recovers those records **without running Ollama again**, and leaves failures without machine JSON untouched. Inspect per-case `stderr.txt` and `runner_record.json` for remaining errors. Use `--resume --retry-failed` only to rerun the cases that have no recoverable record. A machine record being available is not the same as a correct answer.
