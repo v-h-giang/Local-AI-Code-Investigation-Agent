@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
-EXTENSIONS = {'.java', '.sql', '.as', '.mxml', '.xml', '.properties', '.jsp', '.jspx', '.xhtml', '.gradle', '.yaml', '.yml', '.json', '.md', '.txt', '.fxml', '.actionscript', '.hbm', '.conf'}
+EXTENSIONS = {'.java', '.sql', '.as', '.mxml', '.xml', '.properties', '.jsp', '.jspx', '.xhtml', '.gradle', '.yaml', '.yml', '.json', '.md', '.txt', '.fxml', '.actionscript', '.hbm', '.conf', '.py', '.pyi', '.cs', '.csx'}
 EXCLUDE_DIRS = {'.git', '.svn', '.hg', '.idea', '.vscode', 'node_modules', 'target', 'build', 'dist', 'out', 'bin', '.gradle', '.settings', '__pycache__', '.venv', 'venv', 'coverage', '.next'}
 MAX_BYTES = 1_000_000
 MAX_FILES = 25000
@@ -115,6 +115,12 @@ class Repo:
             patt = re.compile(r'\b(class|interface|enum|record|function|public|protected|private|static|override)\b|\b(?:void|int|String|boolean|Boolean|List|ArrayCollection)\s+\w+\s*\(')
         elif ext in ('.sql', '.xml', '.mxml'):
             patt = re.compile(r'(?i)\b(select|insert\s+into|update|delete\s+from|create\s+table|id=|<mx:|<s:|<fx:|<select|<insert|<update|<delete)')
+        elif ext in ('.py', '.pyi'):
+            patt = re.compile(r'^\s*(?:(?:async\s+)?def\s+\w+|class\s+\w+|(?:from|import)\s+\S+|@\w+)')
+        elif ext in ('.cs', '.csx'):
+            patt = re.compile(r'\b(?:namespace|class|interface|record|struct|enum|using)\s+\w+|\b(?:public|private|protected|internal)\s+[^;{]+\(')
+        elif ext == '.md':
+            patt = re.compile(r'^\s*#{1,6}\s+\S')
         else:
             patt = re.compile(r'^\s*(\w[\w.-]*\s*[=:]|#{1,4} )')
         for i, line in enumerate(lines, 1):
