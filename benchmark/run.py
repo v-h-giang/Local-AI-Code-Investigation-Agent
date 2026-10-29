@@ -4,11 +4,13 @@ No production imports, patches, or source edits. Standard library only.
 """
 from __future__ import annotations
 import argparse
+import ast
 import csv
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -77,6 +79,92 @@ def ensure_repo(suite, preferred, fetch):
     if git('rev-parse', 'HEAD', cwd=path) != sha:
         raise RuntimeError('Frozen commit validation failed')
     return path
+
+
+
+def configured_extensions(root=ROOT):
+    """Read effective indexable extensions without importing production modules."""
+    def values(file, variable):
+        tree = ast.parse((Path(root) / file).read_text(encoding='utf-8'))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                if any(isinstance(t, ast.Name) and t.id == variable for t in node.targets):
+                    value = ast.literal_eval(node.value)
+                    return set(value)
+        raise RuntimeError('Cannot find ' + variable + ' in ' + file)
+
+    accessible = values('codebase.py', 'EXTENSIONS')
+    scanned = values('architecture.py', 'CODE_EXTS')
+    config_names = values('architecture.py', 'CONFIG_NAMES')
+    return accessible, scanned, config_names
+
+
+def preflight_report(cases, root=ROOT):
+    """Report gold evidence unreachable through this version of intelligence indexing."""
+    accessible, scanned, config_names = configured_extensions(root)
+    count = supported = 0
+    excluded = {}
+    examples = []
+    for case in cases:
+        for evidence in case.get('gold_spans') or []:
+            path = Path(evidence['path'])
+            count += 1
+            if path.suffix.lower() in accessible and (
+                path.suffix.lower() in scanned or path.name in config_names
+            ):
+                supported += 1
+            else:
+                key = path.suffix.lower() or '<no-extension>'
+                excluded[key] = excluded.get(key, 0) + 1
+                if len(examples) < 4:
+                    examples.append(evidence['path'])
+    return {'selected_cases': len(cases), 'gold_spans_total': count,
+            'gold_spans_indexable': supported,
+            'gold_spans_unsupported': count - supported,
+            'unsupported_extensions': dict(sorted(excluded.items())),
+            'examples_unreachable': examples,
+            'compatible': supported == count,
+            'note': 'Computed from current codebase.EXTENSIONS and architecture._scan configuration; not a semantic quality assessment.'}
+
+
+def child_environment():
+    """Force the child's console and redirected pipe to UTF-8 on Windows."""
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    env['PYTHONUTF8'] = '1'
+    return env
+
+
+def ensure_intelligence_index(suite, project, agent, run_dir, timeout=1800):
+    """Index each frozen repository once; all files stay under benchmark/results."""
+    folder = run_dir / '_prepared_indexes' / suite
+    index = folder / 'middle-files' / 'code_intelligence.sqlite'
+    if index.is_file():
+        return index
+    folder.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(agent), '--project', str(project),
+               'intelligence', '--out', str(folder)]
+    try:
+        completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True,
+                                   encoding='utf-8', errors='replace',
+                                   env=child_environment(), timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError('Code intelligence indexing timed out for ' + suite) from error
+    (folder / 'index_stdout.txt').write_text(completed.stdout, encoding='utf-8')
+    (folder / 'index_stderr.txt').write_text(completed.stderr, encoding='utf-8')
+    if completed.returncode or not index.is_file():
+        raise RuntimeError('Code intelligence index failed for ' + suite + ': ' +
+                           (completed.stderr or completed.stdout)[-1200:])
+    return index
+
+
+def install_case_index(index, case_folder):
+    """Private case index; avoids cross-case SQLite writes and shared output state."""
+    destination = case_folder / 'middle-files' / 'code_intelligence.sqlite'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not destination.is_file():
+        shutil.copy2(index, destination)
+    return destination
 
 
 def valid_ref(project, ref):
@@ -182,9 +270,7 @@ def run_case(case, project, agent, run_dir, args):
     try:
         # Redirected Python stdout on Japanese Windows may default to CP932.
         # Parent-side encoding='utf-8' alone does not set the CHILD encoding.
-        env = os.environ.copy()
-        env['PYTHONIOENCODING'] = 'utf-8'
-        env['PYTHONUTF8'] = '1'
+        env = child_environment()
         result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True,
                                 encoding='utf-8', errors='replace', timeout=args.timeout,
                                 env=env)
@@ -228,20 +314,25 @@ def save_report(run_dir, records, args, selected_count):
     validity = [x['citation_validity'] for x in records if x.get('citation_validity') is not None]
     gold = sum(x.get('gold_spans', 0) for x in records)
     hits = sum(x.get('gold_span_hits', 0) for x in records)
-    failed = sum(not x.get('machine_result_available', False) for x in records)
+    # A saved JSON is evidence of execution, not of a successful CLI call.
+    failed = sum(x.get('exit_code') != 0 or not x.get('machine_result_available', False)
+                 for x in records)
     missing = max(0, selected_count - len(records))
+    with_evidence = sum((x.get('valid_evidence_items') or 0) > 0 for x in records)
     summary = {'suite': args.suite, 'mode': args.mode, 'selected_cases': selected_count,
                'recorded_cases': len(records),
                'successful_cli_calls': sum(x.get('exit_code') == 0 for x in records),
                'cli_nonzero_exits': sum(x.get('exit_code') not in (0, None) for x in records),
                'recovered_machine_records': sum(x.get('recovered_from_machine', False) for x in records),
                'machine_results_available': sum(x.get('machine_result_available', False) for x in records),
+               'insufficient_evidence_cases': sum(x.get('status') == 'insufficient-evidence' for x in records),
+               'cases_with_valid_evidence': with_evidence,
                'failed_or_timed_out': failed + missing,
                'elapsed_seconds_total': round(sum(times), 3),
                'median_seconds': round(statistics.median(times), 3) if times else None,
                'mean_citation_validity': round(statistics.mean(validity), 4) if validity else None,
-               'gold_span_recall_proxy': round(hits / gold, 4) if gold else None,
-               'note': 'Evidence overlap is not answer correctness or an official RepoContextBench score.'}
+               'gold_span_recall_proxy': round(hits / gold, 4) if gold and with_evidence else None,
+               'note': 'Machine JSON recovery is not CLI success. No citation means unscored evidence, not a verified zero answer-accuracy score.'}
     (run_dir / 'results.json').write_text(json.dumps(records, indent=2, ensure_ascii=False), encoding='utf-8')
     (run_dir / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
     csvfile = run_dir / 'review_template.csv'
@@ -257,6 +348,10 @@ def save_report(run_dir, records, args, selected_count):
 def main(argv=None):
     p = argparse.ArgumentParser(description='Standalone optional benchmark runner')
     p.add_argument('--list', action='store_true')
+    p.add_argument('--preflight', action='store_true',
+                   help='Inspect dataset language coverage without running Git, indexer or Qwen')
+    p.add_argument('--allow-unsupported', action='store_true',
+                   help='Explicitly allow unsupported evidence formats (results are not comparable)')
     p.add_argument('--suite', choices=['all', 'repocontextbench', 'stackrepoqa'], default='all')
     p.add_argument('--mode', choices=['ai', 'non-ai'], default='ai')
     p.add_argument('--limit', type=int)
@@ -282,6 +377,9 @@ def main(argv=None):
         cases = cases[:args.limit]
     if args.retry_failed and not args.resume:
         p.error('--retry-failed requires --resume')
+    if args.preflight:
+        print(json.dumps(preflight_report(cases), indent=2, ensure_ascii=False))
+        return 0
     if args.list:
         for c in cases:
             print(c['id'], '[' + c['suite'] + ']', c['question'].splitlines()[0][:160])
@@ -297,6 +395,14 @@ def main(argv=None):
     run_dir = RESULTS / args.run_id
     if run_dir.exists() and not args.resume:
         p.error('Run exists; change --run-id or provide --resume')
+    coverage = preflight_report(cases)
+    # Existing --resume records are safe to inspect without extending the run.
+    # Prevent *new* AI experiments from using unsearchable source languages.
+    if not args.resume and not coverage['compatible'] and not args.allow_unsupported:
+        p.error('Dataset incompatible with current Code Intelligence index: ' +
+                str(coverage['gold_spans_unsupported']) + '/' +
+                str(coverage['gold_spans_total']) +
+                ' gold spans cannot be searched. Run --preflight, or choose a supported suite.')
     projects = {}
     for suite in dict.fromkeys(c['suite'] for c in cases):
         projects[suite] = ensure_repo(suite, getattr(args, suite + '_path'), args.fetch_repos)
@@ -325,6 +431,12 @@ def main(argv=None):
                 if not previous.get('machine_result_available'):
                     print(case['id'], 'previous failure; inspect stderr.txt or use --retry-failed', flush=True)
                 continue
+        if not coverage['compatible'] and not args.allow_unsupported:
+            p.error('Cannot execute unsearchable benchmark cases. Use --preflight; ' +
+                    'enable --allow-unsupported only for a diagnostic run.')
+        suite_index = ensure_intelligence_index(case['suite'], projects[case['suite']],
+                                                agent, run_dir, timeout=args.timeout)
+        install_case_index(suite_index, run_dir / case['id'])
         result = run_case(case, projects[case['suite']], agent, run_dir, args)
         records[case['id']] = result
         save_report(run_dir, list(records.values()), args, len(cases))
