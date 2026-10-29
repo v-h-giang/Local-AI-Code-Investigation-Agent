@@ -84,7 +84,7 @@ The runner now forces `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` for the `agent
 
 Run `py -3 benchmark/run.py --preflight` before starting any new benchmark. The runner checks whether the current production source indexer can read the gold evidence file types; it requires no repository checkout, network, model or index initialization.
 
-The original 20 RepoContextBench cases use evidence from `.py`, `.cs`, and `.md` files. On v4.17, `codebase.EXTENSIONS` and `architecture.CODE_EXTS` do not jointly index these paths, so all 99 gold spans are currently outside the supported search surface. The runner **blocks a new AI benchmark** instead of wasting tokens and reporting misleading scores. An explicit `--allow-unsupported` switch runs a *diagnostic only*, not a comparable official benchmark.
+The original 20 RepoContextBench cases use evidence from `.py`, `.cs`, and `.md` files. Recent source-index updates add these formats to both access and inventory, so `--preflight` can now confirm coverage. This is a *file-type eligibility* check, not proof that all evidence can be retrieved correctly. The runner **blocks a new AI benchmark** instead of wasting tokens and reporting misleading scores. An explicit `--allow-unsupported` switch runs a *diagnostic only*, not a comparable official benchmark.
 
 For diagnostics with supported source languages:
 
@@ -95,3 +95,5 @@ py -3 benchmark/run.py --suite stackrepoqa --mode ai --limit 1 --fetch-repos --r
 The runner now builds one Code Intelligence SQLite index per selected repository under `benchmark/results/<run-id>/_prepared_indexes/`, and copies it to the private output of each case so the existing `investigate` CLI can retrieve source. Its generated files never enter the production directory. Existing failed runs under `--resume` are still readable, but rerunning unsupported tasks requires an explicit `--allow-unsupported`.
 
 **Metrics:** `machine_results_available` means saved JSON exists, not success. `failed_or_timed_out` also counts nonzero CLI exit codes. Zero source evidence yields a null recall score rather than implying that answer accuracy was measured. Read `stderr.txt` to diagnose a nonzero exit. Windows CP932 printing errors on old runs are avoided on newly spawned child processes by forcing UTF-8.
+
+After upgrading code indexing, use a **new run ID**, e.g. `--run-id qwen30_multilang_v1`: `--resume` on the old `qwen30` will only reuse its insufficient-evidence records and will not measure the new indexer. Run `--preflight` and unit tests before creating the new run.
