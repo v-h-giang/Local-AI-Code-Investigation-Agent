@@ -1,4 +1,6 @@
 import json
+from types import SimpleNamespace
+from unittest.mock import patch
 import subprocess
 import sys
 import tempfile
@@ -57,6 +59,49 @@ class BenchmarkTests(unittest.TestCase):
         self.assertNotIn('from benchmark', agent.read_text(encoding='utf-8'))
         self.assertNotIn('import benchmark', agent.read_text(encoding='utf-8'))
         assert (ROOT.parent / 'codebase.py').is_file()
+
+    def test_recovery_from_windows_console_failure_without_rerunning_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / 'project'
+            project.mkdir()
+            (project / 'source.java').write_text('class A {}\n', encoding='utf-8')
+            folder = root / 'results' / 'case'
+            machine_folder = folder / 'middle-files' / 'investigations'
+            machine_folder.mkdir(parents=True)
+            (machine_folder / 'INV.json').write_text(json.dumps({
+                'status': 'completed',
+                'evidence': [{'path': 'source.java', 'line': 1, 'provenance': 'investigation'}],
+                'investigation': {'answer': 'đã tìm được', 'answer_status': 'qwen-grounded-attempt'}
+            }), encoding='utf-8')
+            old = {'id': 'case', 'status': 'failed', 'exit_code': 1, 'elapsed_seconds': 95}
+            (folder / 'runner_record.json').write_text(json.dumps(old), encoding='utf-8')
+            case = {'id': 'case', 'gold_spans': []}
+            recovered = run.recover_existing(case, project, folder, old)
+            self.assertEqual(recovered['status'], 'completed')
+            self.assertTrue(recovered['machine_result_available'])
+            self.assertTrue(recovered['recovered_from_machine'])
+            self.assertEqual(recovered['elapsed_seconds'], 95)
+
+    def test_runner_forces_utf8_in_child_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / 'src'
+            project.mkdir()
+            (project / 'code.java').write_text('class Test {}\n', encoding='utf-8')
+            fake_agent = root / 'agent.py'
+            fake_agent.write_text('print("ok")\n', encoding='utf-8')
+            args = SimpleNamespace(model='qwen3:8b', host='http://127.0.0.1:11434',
+                                   max_steps=1, review_rounds=0, mode='ai',
+                                   max_llm_calls=5, timeout=10)
+            with patch.object(run.subprocess, 'run') as execute:
+                execute.return_value = SimpleNamespace(stdout='', stderr='error', returncode=1)
+                result = run.run_case({'id': 'mock', 'suite': 'repocontextbench',
+                                       'repo': 'microsoft/agent-framework', 'question': 'test'},
+                                      project, fake_agent, root / 'results', args)
+                self.assertEqual(execute.call_args.kwargs['env']['PYTHONIOENCODING'], 'utf-8')
+                self.assertEqual(execute.call_args.kwargs['env']['PYTHONUTF8'], '1')
+                self.assertFalse(result['machine_result_available'])
 
     def test_list_requires_no_model_or_repo_checkout(self):
         proc = subprocess.run([sys.executable, str(ROOT / 'run.py'), '--list'],
