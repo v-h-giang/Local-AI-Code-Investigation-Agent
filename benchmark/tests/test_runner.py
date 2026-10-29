@@ -103,6 +103,23 @@ class BenchmarkTests(unittest.TestCase):
                 self.assertEqual(execute.call_args.kwargs['env']['PYTHONUTF8'], '1')
                 self.assertFalse(result['machine_result_available'])
 
+    def test_preflight_does_not_import_app_or_run_model(self):
+        report = run.preflight_report(run.read_cases())
+        self.assertEqual(report['gold_spans_total'], 99)
+        self.assertEqual(report['gold_spans_unsupported'], 99)
+        self.assertEqual(report['unsupported_extensions'], {'.cs': 38, '.md': 14, '.py': 47})
+
+    def test_child_env_utf8(self):
+        env = run.child_environment()
+        self.assertEqual(env['PYTHONIOENCODING'], 'utf-8')
+        self.assertEqual(env['PYTHONUTF8'], '1')
+
+    def test_preflight_cli(self):
+        proc = subprocess.run([sys.executable, str(ROOT / 'run.py'), '--preflight'],
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn('gold_spans_unsupported', proc.stdout)
+
     def test_list_requires_no_model_or_repo_checkout(self):
         proc = subprocess.run([sys.executable, str(ROOT / 'run.py'), '--list'],
                               capture_output=True, text=True, timeout=20)
