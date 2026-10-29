@@ -116,7 +116,6 @@ def _ast_symbols(path, source):
     return found
 
 
-
 CS_TYPE_RE = re.compile(r'\b(class|interface|enum|record|struct)\s+([A-Za-z_]\w*)')
 CS_METHOD_RE = re.compile(
     r'^\s*(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|'
@@ -728,7 +727,7 @@ def vector_search(repo,text_query,host='http://127.0.0.1:11434',model='nomic-emb
 
 
 def _python_symbols(source):
-    """Parse real Python syntax; syntax errors never block FTS indexing."""
+    """Parse Python syntax safely without executing source text."""
     try:
         tree = ast.parse(source)
     except (SyntaxError, UnicodeError, ValueError):
