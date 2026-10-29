@@ -16,7 +16,7 @@ from xml.sax.saxutils import escape
 from codebase import EXCLUDE_DIRS, MAX_BYTES, Repo
 
 CODE_EXTS = {'.java','.as','.mxml','.sql','.xml','.jsp','.jspx','.xhtml','.fxml','.hbm',
-             '.properties','.yaml','.yml','.toml'}
+             '.properties','.yaml','.yml','.toml','.py','.pyi','.cs','.csx','.md'}
 CONFIG_NAMES = {'pom.xml','build.gradle','build.gradle.kts','settings.gradle','settings.gradle.kts',
                 'gradle.properties','libs.versions.toml','ivy.xml','build.xml','application.xml',
                 'air-app.xml','settings.xml','MANIFEST.MF'}
