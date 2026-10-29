@@ -104,10 +104,17 @@ class BenchmarkTests(unittest.TestCase):
                 self.assertFalse(result['machine_result_available'])
 
     def test_preflight_does_not_import_app_or_run_model(self):
-        report = run.preflight_report(run.read_cases())
+        # Source-index expansion means all 99 pinned evidence spans are eligible.
+        # Preflight must stay static and must not invoke Git, the app CLI, or Qwen.
+        with patch.object(run.subprocess, 'run',
+                          side_effect=AssertionError('preflight must not run a subprocess')):
+            report = run.preflight_report(run.read_cases())
         self.assertEqual(report['gold_spans_total'], 99)
-        self.assertEqual(report['gold_spans_unsupported'], 99)
-        self.assertEqual(report['unsupported_extensions'], {'.cs': 38, '.md': 14, '.py': 47})
+        self.assertEqual(report['gold_spans_indexable'], 99)
+        self.assertEqual(report['gold_spans_unsupported'], 0)
+        self.assertEqual(report['unsupported_extensions'], {})
+        self.assertEqual(report['examples_unreachable'], [])
+        self.assertTrue(report['compatible'])
 
     def test_child_env_utf8(self):
         env = run.child_environment()
