@@ -370,6 +370,77 @@ def search_intelligence(repo,query,limit=20):
         return [dict(row) for row in rows]
 
 
+_SEARCH_STOPWORDS = frozenset(
+    'a an the and or to in on of for by with from how what where which why when '
+    'do does did is are was were can could should would this that these those '
+    'several same one into out then use using used run work works code source '
+    'implementation app project function method result results answer answers '
+    'explain show find locate give make get all each about'
+    .split()
+)
+
+
+def search_relevant_sources(repo, query, limit=10):
+    """Diversified FTS5 retrieval: try conjunctive matches, then broad matches.
+
+    Returns *real indexed line evidence*, not inferred file associations.
+    Per-file ranking prevents one frequently mentioned term from filling every slot.
+    """
+    terms = []
+    for token in re.findall(r'[A-Za-z0-9_]+', query or ''):
+        if len(token) < 3 or token.lower() in _SEARCH_STOPWORDS:
+            continue
+        if token.lower() not in {x.lower() for x in terms}:
+            terms.append(token)
+        if len(terms) >= 9:
+            break
+    if not terms:
+        terms = re.findall(r'[A-Za-z0-9_]{3,}', query or '')[:5]
+    if not terms:
+        return []
+    expressions = []
+    if len(terms) >= 2:
+        # Same-line conjunctive match is high precision, but is not mandatory.
+        expressions.append(' AND '.join('"' + t + '"' for t in terms[:2]))
+    expressions.append(' OR '.join('"' + t + '"' for t in terms))
+    candidates = {}
+    with closing(_connect(repo)) as conn:
+        for phase, expression in enumerate(expressions):
+            rows = conn.execute(
+                'SELECT path,line,snippet(search_fts,2,"[","]"," … ",18) AS excerpt,'
+                'bm25(search_fts) AS rank FROM search_fts '
+                'WHERE search_fts MATCH ? ORDER BY rank LIMIT 100',
+                (expression,)
+            ).fetchall()
+            for row in rows:
+                path, line = row['path'], row['line']
+                key = (path, line)
+                if key in candidates:
+                    continue
+                excerpt = row['excerpt']
+                content = (excerpt + ' ' + path).lower()
+                matches = sum(t.lower() in content for t in terms)
+                in_path = sum(t.lower() in path.lower() for t in terms)
+                # Keep phase-0 AND matches and match-diverse file names preferred.
+                score = matches * 12 + in_path * 5 + (8 if phase == 0 else 0)
+                candidates[key] = {'path':path,'line':line,'excerpt':excerpt,
+                                   'rank':row['rank'],'match_terms':matches,
+                                   '_score':score}
+    ordered = sorted(candidates.values(),
+                     key=lambda x:(-x['_score'],x['rank'],x['path'],x['line']))
+    chosen=[];per_file=Counter()
+    # One best matching location per file first, then a second if space remains.
+    for cap in (1,2):
+        for item in ordered:
+            if len(chosen) >= max(1,min(30,int(limit))):
+                break
+            if per_file[item['path']] >= cap:
+                continue
+            chosen.append({k:v for k,v in item.items() if not k.startswith('_')})
+            per_file[item['path']] += 1
+    return chosen
+
+
 def _neighbors(conn,frontier,direction):
     if direction=='out':query='SELECT dst AS target,kind,path,line,confidence FROM relations WHERE src=?'
     else:query='SELECT src AS target,kind,path,line,confidence FROM relations WHERE dst=?'
