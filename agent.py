@@ -45,7 +45,7 @@ def main(argv=None):
     s = sub.add_parser('intelligence', help='Incrementally build symbol/call/search/SQL intelligence index')
     s.add_argument('--out', default='output/architecture')
     s = sub.add_parser('investigate', help='Investigate with local Qwen by default; --non-ai for retrieval only')
-    s.add_argument('question'); s.add_argument('--budget',type=int,default=1200)
+    s.add_argument('question'); s.add_argument('--budget',type=int,default=2400)
     s.add_argument('--max-steps',type=int,default=4,help='Maximum read-only tool investigation steps (1-6)')
     s.add_argument('--review-rounds',type=int,default=1,help='Local Qwen evidence review passes (0-2)')
     s.add_argument('--max-llm-calls',type=int,default=80,help='Hard limit for this investigation')
