@@ -41,7 +41,7 @@ public class OrderService {
                             {'action':'finish'}])
         result=investigate(self.repo,'What is affected by saveOrder?',model,budget=1200,max_steps=5)
         self.assertEqual(result['investigation_mode'],'iterative-qwen-tools')
-        self.assertEqual([x['tool'] for x in result['steps']],['symbol','impact','search'])
+        self.assertEqual([x['tool'] for x in result['steps']],['discover_files','impact','search'])
         self.assertTrue(result['source_citations'])
         self.assertEqual(result['answer_status'],'qwen-grounded-attempt')
         self.assertLessEqual(result['estimated_tokens'],result['token_budget'])
