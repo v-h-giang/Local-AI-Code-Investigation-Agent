@@ -65,15 +65,31 @@ try {
     Write-Host '[Setup] Core Python modules: OK'
 
     if ($RunTests) {
-        Write-Host '[Setup] Running production tests ...'
-        & $venvPython -m unittest discover -s tests -v
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Production tests failed.'
+        # unittest writes progress to stderr even on success; preserve its raw
+        # output in files instead of treating normal output as PowerShell errors.
+        $logDir = Join-Path $venvDir 'setup-logs'
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+        $failedSuites = @()
+        foreach ($suite in @('tests', 'benchmark/tests')) {
+            $label = if ($suite -eq 'tests') { 'production' } else { 'benchmark' }
+            $stdoutLog = Join-Path $logDir ($label + '.stdout.log')
+            $stderrLog = Join-Path $logDir ($label + '.stderr.log')
+            Write-Host "[Setup] Running $label tests; full logs: $stderrLog"
+            $process = Start-Process -FilePath $venvPython -NoNewWindow -Wait -PassThru -ArgumentList @('-m', 'unittest', 'discover', '-s', $suite, '-v') -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+            $exitCode = $process.ExitCode
+            $tail = @(Get-Content -LiteralPath $stderrLog -Tail 12 -ErrorAction SilentlyContinue)
+            foreach ($line in $tail) { Write-Host $line }
+            if ($exitCode -ne 0) {
+                $failedSuites += $label
+                Write-Warning "$label tests failed (exit code $exitCode). See $stderrLog"
+            }
+            else {
+                Write-Host "[Setup] $label tests passed."
+            }
         }
-        Write-Host '[Setup] Running optional benchmark runner tests ...'
-        & $venvPython -m unittest discover -s benchmark/tests -v
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Benchmark runner tests failed.'
+        if ($failedSuites.Count -gt 0) {
+            throw ('Unit tests failed: ' + ($failedSuites -join ', ') +
+                   ". Setup succeeded; send *.stderr.log from $logDir for diagnosis.")
         }
     }
 
