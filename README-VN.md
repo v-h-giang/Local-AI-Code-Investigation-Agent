@@ -67,6 +67,27 @@ py -3 agent.py --project "D:\Work\LegacyProject" synthesize --out "D:\AgentOutpu
 
 > **Cài đặt lần đầu:** Cần [Python 3.11+](https://www.python.org/downloads/windows/) và [Ollama trên Windows](https://ollama.com/download/windows), sau đó chạy `ollama pull qwen3:8b`. Không cần Node.js hoặc cloud AI. Lệnh `architecture` không kèm cờ AI vẫn chạy không cần Qwen.
 
+## Thiết lập môi trường Python lần đầu (Windows PowerShell)
+
+Chạy một lần trong thư mục repository (chạy lại cũng an toàn):
+
+```powershell
+.\setup.ps1
+```
+
+Nếu PowerShell chặn script, dùng `powershell -ExecutionPolicy Bypass -File .\setup.ps1`. Script cần Python 3.11+, tạo `.venv`, kiểm tra import các module chính, **không tự tải model Ollama**. Ứng dụng cơ bản không cần cài package pip bên ngoài.
+
+Tùy chọn: `-PullModel` (tải `qwen3:8b`, cần Ollama), `-WithTreeSitter` (parser tùy chọn), `-RunTests` (chạy unit test).
+
+Không cần activate, có thể chạy trực tiếp:
+
+```powershell
+.\.venv\Scripts\python.exe agent.py --project ".\sample_project" architecture --out ".\output\sample-architecture"
+.\.venv\Scripts\python.exe benchmark\run.py --preflight
+```
+
+Thư mục `.venv/` được .gitignore loại trừ. Muốn tạo lại môi trường thì xóa `.venv` rồi chạy lại setup.
+
 ## Cài đặt trên Windows
 
 ```powershell
