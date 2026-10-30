@@ -291,7 +291,10 @@ def build_intelligence(repo:Repo,out='output/architecture', *,verbose=True):
     if verbose:
         print(f'[Intelligence] Indexing {len(fingerprints)} source files; SQLite: {target}',flush=True)
     last_progress=started
-    with sqlite3.connect(target) as conn:
+    # sqlite3.Connection's context manager commits/rolls back but does NOT close.
+    # On Windows, leaving it open locks code_intelligence.sqlite during test cleanup.
+    # closing() guarantees release on success and on exceptions.
+    with closing(sqlite3.connect(target)) as conn:
         _setup(conn)
         version=conn.execute("SELECT value FROM meta WHERE key='version'").fetchone()
         new_schema=(not version or version[0]!=SCHEMA_VERSION)
