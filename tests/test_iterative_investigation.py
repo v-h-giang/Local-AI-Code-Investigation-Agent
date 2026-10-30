@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,9 +9,10 @@ from investigation_loop import _validate_action, parse_json
 
 
 class ScriptedQwen:
-    def __init__(self, decisions):
+    def __init__(self, decisions, answer=None):
         self.decisions=list(decisions)
         self.calls=[]
+        self.answer=answer
     def call(self,messages,tools=False,num_predict=None,**kwargs):
         self.calls.append((num_predict,messages))
         if num_predict==220:
@@ -19,7 +21,15 @@ class ScriptedQwen:
         if num_predict==180:
             d=self.decisions.pop(0) if self.decisions else {'action':'finish'}
             return {'content':json.dumps(d)}
-        return {'content':'Có định nghĩa tại backend/OrderService.java:4; không có bằng chứng xác minh runtime.'}
+        if self.answer is not None:
+            return {'content':self.answer}
+        # The fake model must cite actual tool evidence, not a hard-coded line.
+        prompt=messages[-1]['content']
+        allowed=prompt.split('Allowed citations: ',1)[1].split('\nTool observations:',1)[0]
+        match=re.search(r'[\w./-]+\.[A-Za-z0-9]+:\d+',allowed)
+        if not match:
+            return {'content':'Chưa có bằng chứng để kết luận.'}
+        return {'content':f'Bằng chứng liên quan: {match.group(0)}; chưa xác minh runtime.'}
 
 class IterativeInvestigationTests(unittest.TestCase):
     def setUp(self):
@@ -48,6 +58,17 @@ public class OrderService {
         self.assertLessEqual(result['estimated_tokens'],result['token_budget'])
         self.assertEqual(model.calls[0][0],220)
         self.assertEqual(model.calls[-1][0],340)
+
+    def test_fabricated_citation_is_still_rejected(self):
+        model=ScriptedQwen([{'action':'tool','tool':'search','query':'saveOrder'},
+                            {'action':'finish'}],
+                           answer='Claim at backend/OrderService.java:9999.')
+        result=investigate(self.repo,'Where is saveOrder?',model,
+                           budget=1200,max_steps=4,review_rounds=0)
+        self.assertTrue(result['source_citations'])
+        self.assertEqual(result['answer_status'],
+                         'qwen-grounded-attempt-with-unsupported-citations')
+        self.assertIn('backend/OrderService.java:9999',result['unsupported_citations'])
 
     def test_bounded_and_denies_code_execution(self):
         model=ScriptedQwen([{'action':'tool','tool':'shell','query':'rm -rf /'}]*6)
