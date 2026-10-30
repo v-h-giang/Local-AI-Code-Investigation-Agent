@@ -259,6 +259,7 @@ def run_case(case, project, agent, run_dir, args):
     folder.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, str(agent), '--project', str(project),
            '--model', args.model, '--host', args.host,
+           '--timeout', str(getattr(args, 'llm_timeout', 240)),
            'investigate', case['question'], '--out', str(folder),
            '--max-steps', str(args.max_steps), '--review-rounds',
            str(args.review_rounds if args.mode == 'ai' else 0),
@@ -403,12 +404,17 @@ def main(argv=None):
     p.add_argument('--max-steps', type=int, default=4)
     p.add_argument('--review-rounds', type=int, default=1)
     p.add_argument('--max-llm-calls', type=int, default=80)
-    p.add_argument('--timeout', type=int, default=1800)
+    p.add_argument('--timeout', type=int, default=1800,
+                   help='Maximum subprocess runtime per benchmark case (seconds)')
+    p.add_argument('--llm-timeout', type=int, default=240,
+                   help='HTTP timeout for EACH Ollama /api/chat request (seconds; agent default 240)')
     p.add_argument('--run-id', default='baseline')
     p.add_argument('--resume', action='store_true')
     p.add_argument('--retry-failed', action='store_true',
                    help='With --resume, rerun only failed cases lacking recoverable machine JSON')
     args = p.parse_args(argv)
+    if args.llm_timeout < 1 or args.timeout < 1:
+        p.error('--llm-timeout and --timeout must be positive seconds')
     cases = [c for c in read_cases() if args.suite == 'all' or c['suite'] == args.suite]
     if args.limit is not None:
         if args.limit < 1:
