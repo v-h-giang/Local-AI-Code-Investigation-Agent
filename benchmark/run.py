@@ -198,10 +198,15 @@ def score_evidence(project, case, record):
     gold = case.get('gold_spans') or []
     hits = sum(any(path == x['path'] and x['start_line'] <= ln <= x['end_line']
                    for path, ln in refs) for x in gold)
+    gold_files = {x['path'] for x in gold}
+    referenced_files = {path for path, _ in refs}
+    file_hits = len(gold_files & referenced_files)
     return {
         'evidence_items': len(rows), 'valid_evidence_items': len(refs),
         'citation_validity': round(len(refs) / len(rows), 4) if rows else None,
         'gold_spans': len(gold), 'gold_span_hits': hits,
+        'gold_files': len(gold_files), 'gold_file_hits': file_hits,
+        'gold_file_recall_proxy': round(file_hits / len(gold_files), 4) if gold_files else None,
         'gold_span_recall_proxy': round(hits / len(gold), 4) if gold else None,
     }
 
@@ -314,6 +319,8 @@ def save_report(run_dir, records, args, selected_count):
     validity = [x['citation_validity'] for x in records if x.get('citation_validity') is not None]
     gold = sum(x.get('gold_spans', 0) for x in records)
     hits = sum(x.get('gold_span_hits', 0) for x in records)
+    files_total = sum(x.get('gold_files', 0) for x in records)
+    files_hit = sum(x.get('gold_file_hits', 0) for x in records)
     # A saved JSON is evidence of execution, not of a successful CLI call.
     failed = sum(x.get('exit_code') != 0 or not x.get('machine_result_available', False)
                  for x in records)
@@ -332,6 +339,7 @@ def save_report(run_dir, records, args, selected_count):
                'median_seconds': round(statistics.median(times), 3) if times else None,
                'mean_citation_validity': round(statistics.mean(validity), 4) if validity else None,
                'gold_span_recall_proxy': round(hits / gold, 4) if gold and with_evidence else None,
+               'gold_file_recall_proxy': round(files_hit / files_total, 4) if files_total and with_evidence else None,
                'note': 'Machine JSON recovery is not CLI success. No citation means unscored evidence, not a verified zero answer-accuracy score.'}
     (run_dir / 'results.json').write_text(json.dumps(records, indent=2, ensure_ascii=False), encoding='utf-8')
     (run_dir / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
