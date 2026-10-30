@@ -140,7 +140,7 @@ def _action_suggestion(llm,question,plan,history,used,remaining):
                                 {'role':'user','content':prompt}],tools=False,num_predict=180).get('content',''))
 
 
-def investigate_iteratively(repo,question,llm,plan,budget=1200,max_steps=4,planner='qwen-json-plan',planning_error=None,review_rounds=1):
+def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,planner='qwen-json-plan',planning_error=None,review_rounds=1):
     """Run at most max_steps allowlisted tools; then synthesize bounded evidence.
 
     The LLM may request a next tool after reviewing each observation; if model JSON
