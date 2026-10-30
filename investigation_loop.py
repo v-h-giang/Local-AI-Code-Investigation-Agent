@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 
-ALLOWED_TOOLS = ('search','symbol','trace','impact','flows','history','clusters')
+ALLOWED_TOOLS = ('search','read_source','symbol','trace','impact','flows','history','clusters')
 TOKEN_RE = re.compile(r'^[\w.$ /-]{1,100}$',re.UNICODE)
 SYMBOL_RE = re.compile(r'^[A-Za-z_$][\w$]*$')
 
@@ -41,6 +41,19 @@ def _validate_action(action):
     tool=action.get('tool')
     if tool not in ALLOWED_TOOLS:return None
     query=action.get('query','')
+    if tool == 'read_source':
+        path=action.get('path','')
+        if not isinstance(path,str) or not path or len(path)>240 or '..' in path.replace('\\','/').split('/'):
+            return None
+        try:
+            start=int(action.get('start_line',1))
+            end=int(action.get('end_line',start+49))
+        except (TypeError,ValueError):
+            return None
+        if start<1 or end<start or end-start>99:
+            return None
+        return {'tool':tool,'query':'','path':path,'start_line':start,'end_line':end,
+                'depth':1,'direction':'out'}
     if tool in ('search','symbol','trace','impact'):
         if not isinstance(query,str) or not TOKEN_RE.fullmatch(query.strip()):return None
         query=query.strip()
@@ -57,10 +70,19 @@ def _validate_action(action):
 
 
 def _tool_execute(repo, action):
-    from code_intelligence import (search_intelligence,symbol_query,trace,impact,
+    from code_intelligence import (search_relevant_sources,symbol_query,trace,impact,
                                    business_flows,git_history,clusters)
     name=action['tool'];query=action['query'];depth=action['depth']
-    if name=='search':return search_intelligence(repo,query,limit=10)
+    if name=='search':return search_relevant_sources(repo,query,limit=12)
+    if name=='read_source':
+        path=action['path'];start=action['start_line'];end=action['end_line']
+        content=repo.read_file(path,start,end)
+        refs=[]
+        for line in content.splitlines():
+            match=re.match(r'^\s*(\d+) \| ',line)
+            if match:refs.append(f'{path}:{match.group(1)}')
+        return {'path':path,'start_line':start,'end_line':end,'content':content,
+                'source_refs':refs}
     if name=='symbol':return symbol_query(repo,query,limit=12)
     if name=='trace':return trace(repo,query,max_depth=depth,direction=action['direction'],max_nodes=40)
     if name=='impact':return impact(repo,query,max_depth=depth)
@@ -88,19 +110,24 @@ def _evidence_lines(result):
             path=v.get('path');line=v.get('line')
             if isinstance(path,str) and isinstance(line,int) and line>0:
                 found.append(f'{path}:{line}')
+            for ref in v.get('source_refs',[]):
+                if isinstance(ref,str):found.append(ref)
             for key in ('definitions','textual_references','entrypoint_candidates','sql_tables',
                         'static_edges','flow_candidates','evidence','paths'):
                 if key in v:walk(v[key])
     walk(result)
-    return list(dict.fromkeys(found))[:25]
+    return list(dict.fromkeys(found))[:60]
 
 
 def _action_suggestion(llm,question,plan,history,used,remaining):
-    summary=json.dumps(history[-3:],ensure_ascii=False,default=str)[:2400]
+    summary=json.dumps(history[-3:],ensure_ascii=False,default=str)[:3200]
     instructions=(
         'You direct a READ-ONLY static source investigation. Return ONLY JSON. '
-        'Choose {"action":"tool","tool":"search|symbol|trace|impact|flows|history|clusters",'
-        '"query":"...","depth":1-4,"direction":"in|out","reason":"..."} '
+        'Choose {"action":"tool","tool":"search|read_source|symbol|trace|impact|flows|history|clusters",'
+        '"query":"...","path":"relative/path.py","start_line":1,"end_line":60,'
+        '"depth":1-4,"direction":"in|out","reason":"..."} '
+        'For read_source, use an exact path from tool evidence and a window up to 100 lines. '
+        'After locating a promising function or symbol, read its implementation before finishing. '
         'or {"action":"finish","reason":"..."}. '
         'Use tool if a meaningful unanswered question remains; finish if evidence is sufficient, '
         'repetitive, or no promising next tool exists. Never claim a runtime call from heuristic graph. '
@@ -121,6 +148,9 @@ def investigate_iteratively(repo,question,llm,plan,budget=1200,max_steps=4,plann
     """
     max_steps=max(1,min(6,int(max_steps)))
     actions=_tools_for_plan(dict(plan,question=question))
+    def action_key(action):
+        return (action['tool'],action.get('query',''),action.get('direction','out'),
+                action.get('path',''),action.get('start_line',0),action.get('end_line',0))
     history=[];used=set();citations=[];errors=[];spent=0
     # Reserve answer context from the shared evidence budget; each tool capped.
     max_chars=max(600,min(12000,int(budget)*3))
@@ -136,15 +166,16 @@ def investigate_iteratively(repo,question,llm,plan,budget=1200,max_steps=4,plann
             except (ValueError,TypeError,RuntimeError,KeyError) as exc:
                 errors.append('Qwen tool decision fallback: '+str(exc)[:150])
         # Initial action and malformed/invalid/repeated suggestions: deterministic fallback.
-        if selection is None or (selection['tool'],selection['query'],selection['direction']) in used:
+        if selection is None or action_key(selection) in used:
             selection=next((x for proposed in actions if (x:=_validate_action(proposed))
-                            and (x['tool'],x['query'],x['direction']) not in used),None)
+                            and action_key(x) not in used),None)
         if selection is None:break
-        key=(selection['tool'],selection['query'],selection['direction'])
+        key=action_key(selection)
         used.add(key)
         try:
             observation=_tool_execute(repo,selection)
             source_refs=_evidence_lines(observation)
+            if selection['tool']=='read_source':source_refs=source_refs[:12]
             compact=_compact_tool_result(observation,max_chars=min(1800,max(500,max_chars//max_steps)))
             item={'step':step+1,'tool':selection['tool'],'query':selection['query'],
                   'reason':reason,'observation':compact,'source_refs':source_refs,
