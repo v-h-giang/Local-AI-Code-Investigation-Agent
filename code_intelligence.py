@@ -441,6 +441,93 @@ def search_relevant_sources(repo, query, limit=10):
     return chosen
 
 
+# File discovery is separate from line citations: filenames are navigational
+# candidates, not proof that a statement appears at a particular source line.
+_FILE_SYNONYMS = {
+    'parallel': ('concurrent', 'concurrency', 'fanout'),
+    'concurrent': ('parallel', 'concurrency'),
+    'combine': ('aggregate', 'aggregation', 'merge', 'fanin'),
+    'combining': ('aggregate', 'aggregation', 'merge', 'fanin'),
+    'aggregated': ('aggregate', 'aggregation', 'merge', 'fanin'),
+    'resume': ('checkpoint', 'checkpointing', 'resumable'),
+    'resuming': ('checkpoint', 'checkpointing', 'resumable'),
+    'saved': ('checkpoint', 'checkpointing', 'persistence'),
+    'persist': ('checkpoint', 'checkpointing', 'persistence'),
+    'streaming': ('stream', 'streamed'),
+    'approval': ('hitl', 'human', 'review'),
+    'human': ('hitl', 'approval'),
+    'yaml': ('declarative',),
+    'declarative': ('yaml',),
+}
+_FILE_COMMON = _SEARCH_STOPWORDS | {
+    'agent', 'agents', 'workflow', 'workflows', 'multiple', 'system',
+    'request', 'app', 'application', 'example', 'samples', 'sample',
+    'python', 'dotnet', 'net', 'after', 'before', 'across', 'regular',
+}
+
+
+def _path_words(path):
+    """Split path, snake_case and CamelCase without changing actual filenames."""
+    divided = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', path)
+    divided = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', divided)
+    return set(re.findall(r'[a-z0-9]+', divided.lower()))
+
+
+def search_file_candidates(repo, query, limit=6):
+    """Discover file paths by question vocabulary, independently of line FTS5.
+
+    Reads the already-built SQLite file inventory. A matching filename is only
+    a *lead*, not a validated source citation. No gold-label data is accessed.
+    """
+    if not isinstance(query, str) or not query.strip():
+        return []
+    words = []
+    for word in re.findall(r'[A-Za-z0-9_]+', query):
+        lowered = word.lower()
+        if len(lowered) >= 3 and lowered not in _SEARCH_STOPWORDS and lowered not in words:
+            words.append(lowered)
+        if len(words) >= 16:
+            break
+    preferred = None
+    if re.search(r'(?i)\.net\b|\bc#\b|\bcsharp\b|\bdotnet\b', query):
+        preferred = 'dotnet'
+    elif re.search(r'(?i)\bpython\b', query):
+        preferred = 'python'
+    ranked = []
+    with closing(_connect(repo)) as conn:
+        files = conn.execute('SELECT path FROM files')
+        for (path,) in files:
+            path_parts = _path_words(path)
+            basename = _path_words(Path(path).stem)
+            score = 0
+            matched = []
+            for word in words:
+                variants = (word,) + _FILE_SYNONYMS.get(word, ())
+                if not any(v in path_parts for v in variants):
+                    continue
+                matched.append(word)
+                weight = 2 if word in _FILE_COMMON else 9
+                score += weight + (6 if any(v in basename for v in variants) else 0)
+            if not matched:
+                continue
+            normalized = path.replace('\\', '/').lower()
+            if preferred:
+                if normalized.startswith(preferred + '/'):
+                    score += 12
+                elif normalized.startswith(('dotnet/', 'python/')):
+                    score -= 25
+            # Tests are useful evidence, but show an implementation first.
+            if '/tests/' in normalized or normalized.startswith('tests/'):
+                score -= 3
+            if score <= 0:
+                continue
+            ranked.append((score, len(matched), path, matched))
+    ranked.sort(key=lambda x: (-x[0], -x[1], len(x[2]), x[2]))
+    return [{'path': path, 'match_terms': matched, 'path_score': score,
+             'kind': 'file-path-candidate', 'citation': False}
+            for score, _, path, matched in ranked[:max(1, min(15, int(limit)))]]
+
+
 def _neighbors(conn,frontier,direction):
     if direction=='out':query='SELECT dst AS target,kind,path,line,confidence FROM relations WHERE src=?'
     else:query='SELECT src AS target,kind,path,line,confidence FROM relations WHERE dst=?'
