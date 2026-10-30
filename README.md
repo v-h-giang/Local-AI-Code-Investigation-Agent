@@ -67,6 +67,27 @@ py -3 agent.py --project "D:\Work\LegacyProject" synthesize --out "D:\AgentOutpu
 
 > **First-time setup:** Install [Python 3.11+](https://www.python.org/downloads/windows/) and [Ollama for Windows](https://ollama.com/download/windows), then run `ollama pull qwen3:8b`. No Node.js, cloud LLM or external AI API is needed. Plain `architecture` runs without Qwen.
 
+## First-run Python environment (Windows PowerShell)
+
+Create a local virtual environment once (safe to repeat):
+
+```powershell
+.\setup.ps1
+```
+
+If PowerShell blocks local scripts, use `powershell -ExecutionPolicy Bypass -File .\setup.ps1` from the project directory. The script requires Python 3.11+, verifies core module imports, and **does not** download models or require Ollama for static analysis. No third-party pip dependencies are required by default.
+
+Optional flags: `-PullModel` (download `qwen3:8b`, requires installed/running Ollama), `-WithTreeSitter` (optional language parser), and `-RunTests`.
+
+Run without activating:
+
+```powershell
+.\.venv\Scripts\python.exe agent.py --project ".\sample_project" architecture --out ".\output\sample-architecture"
+.\.venv\Scripts\python.exe benchmark\run.py --preflight
+```
+
+The `.venv/` folder is gitignored. To recreate it, delete the folder and rerun setup.
+
 ## Installation (Windows)
 
 ```powershell
