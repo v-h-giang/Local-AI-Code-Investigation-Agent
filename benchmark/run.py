@@ -482,7 +482,7 @@ def main(argv=None):
         detail = result.get('error') or result.get('cli_warning') or ''
         print(case['id'], result['status'], result['elapsed_seconds'], 'seconds',
               detail[:200], flush=True)
-    summary = save_report(run_dir, list(records.values()), args, len(cases))
+    summary = save_report(run_dir, list(records.values()), args, len(cases), cases=cases)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if summary['failed_or_timed_out'] == 0 else 2
 
