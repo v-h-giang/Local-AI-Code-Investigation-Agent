@@ -696,7 +696,7 @@ def _candidate_evidence(repo,question,plan,budget):
             'retriever':'Qwen plan + SQLite FTS5 BM25 + indexed symbol/relationship graph'}
 
 
-def investigate(repo,question,llm=None,budget=1200,max_steps=4,review_rounds=1):
+def investigate(repo,question,llm=None,budget=2400,max_steps=4,review_rounds=1):
     """Without AI: lexical evidence. With AI: bounded plan/retrieve/synthesize."""
     if llm is None:return retrieval_plan(repo,question,budget=budget)
     if not question.strip():raise ValueError('Question cannot be empty')
