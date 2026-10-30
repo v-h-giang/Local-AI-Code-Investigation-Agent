@@ -18,7 +18,10 @@ try {
         throw 'Python launcher (py.exe) not found. Install Python 3.11+ for Windows and enable the Python launcher.'
     }
 
-    & py -3 -c 'import sys; print("Python", sys.version.split()[0]); sys.exit(0 if sys.version_info >= (3, 11) else 1)'
+    # Avoid quoted Python string literals in -c: Windows PowerShell 5.1 may
+    # strip embedded double quotes when invoking native commands.
+    & py -3 --version
+    & py -3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'
     if ($LASTEXITCODE -ne 0) {
         throw 'Python 3.11 or newer is required.'
     }
@@ -38,10 +41,11 @@ try {
         throw '.venv was created but Scripts\python.exe was not found.'
     }
 
-    & $venvPython -c 'import sys; print("Virtual environment:", sys.prefix); sys.exit(0 if sys.version_info >= (3, 11) and sys.prefix != sys.base_prefix else 1)'
+    & $venvPython -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) and sys.prefix != sys.base_prefix else 1)'
     if ($LASTEXITCODE -ne 0) {
         throw 'Invalid or outdated .venv. Rename/remove .venv and run setup again.'
     }
+    Write-Host "[Setup] Virtual environment: $venvDir"
 
     # The application uses Python's standard library by default.
     # Tree-sitter language pack is an optional AST enhancement.
@@ -54,10 +58,11 @@ try {
     }
 
     Write-Host '[Setup] Verifying core module imports ...'
-    & $venvPython -c 'import agent, codebase, architecture, code_intelligence, investigation_loop; print("Core Python modules: OK")'
+    & $venvPython -c 'import agent, codebase, architecture, code_intelligence, investigation_loop'
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to import the application modules.'
     }
+    Write-Host '[Setup] Core Python modules: OK'
 
     if ($RunTests) {
         Write-Host '[Setup] Running production tests ...'
