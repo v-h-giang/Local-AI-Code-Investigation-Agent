@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from codebase import Repo
-from code_intelligence import build_intelligence, search_relevant_sources
+from code_intelligence import build_intelligence, search_relevant_sources, search_file_candidates
 from investigation_loop import _validate_action, _tool_execute, investigate_iteratively
 
 
@@ -33,6 +33,29 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertTrue(any(x['path'] == 'worker.py' for x in results))
         self.assertTrue(all(x['line'] > 0 for x in results))
         self.assertTrue(all((self.root / x['path']).exists() for x in results))
+
+    def test_file_discovery_uses_path_terms_without_fabricating_citations(self):
+        (self.root / 'concurrent_pipeline.py').write_text(
+            'def dispatch():\n    return 42\n', encoding='utf-8')
+        build_intelligence(self.repo, Path(self.temp.name) / 'output', verbose=False)
+        matches = search_file_candidates(
+            self.repo, 'How do parallel agents combine responses?', limit=8)
+        self.assertTrue(any(x['path'] == 'concurrent_pipeline.py' for x in matches))
+        self.assertTrue(all(x['citation'] is False for x in matches))
+        self.assertTrue(all('line' not in x for x in matches))
+
+    def test_file_discovery_prefers_requested_language(self):
+        (self.root / 'python').mkdir()
+        (self.root / 'dotnet').mkdir()
+        (self.root / 'python' / 'checkpoint_resume.py').write_text(
+            'def restore():\n    return 1\n', encoding='utf-8')
+        (self.root / 'dotnet' / 'CheckpointResume.cs').write_text(
+            'public class CheckpointResume {}\n', encoding='utf-8')
+        build_intelligence(self.repo, Path(self.temp.name) / 'output', verbose=False)
+        matches = search_file_candidates(
+            self.repo, 'How does a .NET workflow resume from a checkpoint?', limit=6)
+        self.assertTrue(matches)
+        self.assertTrue(matches[0]['path'].startswith('dotnet/'))
 
     def test_read_source_is_bounded_and_cites_actual_lines(self):
         action = _validate_action({'tool':'read_source','path':'worker.py',
