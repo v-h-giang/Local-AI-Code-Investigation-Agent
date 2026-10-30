@@ -50,6 +50,9 @@ class BenchmarkTests(unittest.TestCase):
             self.assertEqual(score['gold_span_hits'], 1)
             self.assertEqual(score['citation_validity'], .5)
             self.assertEqual(score['gold_span_recall_proxy'], 1.0)
+            self.assertEqual(score['gold_file_recall_proxy'], 1.0)
+            self.assertEqual(score['gold_files'], 1)
+            self.assertEqual(score['gold_file_hits'], 1)
 
     def test_production_has_no_dependency_on_benchmark(self):
         # Test from parent root without executing the model, importing application
