@@ -25,7 +25,10 @@ def parse_json(content):
 def _tools_for_plan(plan):
     intent=plan.get('intent','locate')
     symbols=plan.get('symbols') or []
-    tasks=[{'tool':'discover_files','query':plan.get('question','')}]
+    # Natural-language questions may contain '?' or '#'; unlike a symbol name,
+    # they must not be validated with TOKEN_RE. File discovery uses only
+    # parameterized SQL against the local file inventory.
+    tasks=[{'tool':'discover_files','query':str(plan.get('question',''))[:700]}]
     for query in (plan.get('queries') or [])[:2]:
         tasks.append({'tool':'search','query':query})
     for sym in symbols[:2]:
@@ -55,7 +58,12 @@ def _validate_action(action):
             return None
         return {'tool':tool,'query':'','path':path,'start_line':start,'end_line':end,
                 'depth':1,'direction':'out'}
-    if tool in ('discover_files','search','symbol','trace','impact'):
+    if tool=='discover_files':
+        if (not isinstance(query,str) or not query.strip() or len(query)>700
+                or any(ord(char)<32 or ord(char)==127 for char in query)):
+            return None
+        query=query.strip()
+    elif tool in ('search','symbol','trace','impact'):
         if not isinstance(query,str) or not TOKEN_RE.fullmatch(query.strip()):return None
         query=query.strip()
         if tool in ('symbol','trace','impact') and not SYMBOL_RE.fullmatch(query):return None
