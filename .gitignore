@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 output/
 *.sqlite
+
+# Project-local Python virtual environments
+.venv/
+venv/
