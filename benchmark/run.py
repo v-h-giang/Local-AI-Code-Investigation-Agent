@@ -313,13 +313,27 @@ def run_case(case, project, agent, run_dir, args):
     return record
 
 
-def save_report(run_dir, records, args, selected_count):
+def save_report(run_dir, records, args, selected_count, cases=None):
     records = sorted(records, key=lambda x: x['id'])
     times = [x['elapsed_seconds'] for x in records]
     validity = [x['citation_validity'] for x in records if x.get('citation_validity') is not None]
-    gold = sum(x.get('gold_spans', 0) for x in records)
+    # Use ALL selected questions for the all-case denominator, even when a CLI
+    # fails before machine JSON is written. Preserve a separate successful-case
+    # rate for diagnosing retrieval independently from execution failures.
+    successful_records = [x for x in records if x.get('exit_code') == 0
+                          and x.get('machine_result_available', False)]
+    successful_gold = sum(x.get('gold_spans', 0) for x in successful_records)
+    successful_hits = sum(x.get('gold_span_hits', 0) for x in successful_records)
+    successful_files = sum(x.get('gold_files', 0) for x in successful_records)
+    successful_file_hits = sum(x.get('gold_file_hits', 0) for x in successful_records)
+    if cases is not None:
+        gold = sum(len(x.get('gold_spans') or []) for x in cases)
+        files_total = sum(len({span['path'] for span in (x.get('gold_spans') or [])})
+                          for x in cases)
+    else:
+        gold = sum(x.get('gold_spans', 0) for x in records)
+        files_total = sum(x.get('gold_files', 0) for x in records)
     hits = sum(x.get('gold_span_hits', 0) for x in records)
-    files_total = sum(x.get('gold_files', 0) for x in records)
     files_hit = sum(x.get('gold_file_hits', 0) for x in records)
     # A saved JSON is evidence of execution, not of a successful CLI call.
     failed = sum(x.get('exit_code') != 0 or not x.get('machine_result_available', False)
@@ -338,18 +352,35 @@ def save_report(run_dir, records, args, selected_count):
                'elapsed_seconds_total': round(sum(times), 3),
                'median_seconds': round(statistics.median(times), 3) if times else None,
                'mean_citation_validity': round(statistics.mean(validity), 4) if validity else None,
+               'gold_spans_selected': gold,
+               'gold_span_hits': hits,
+               'gold_spans_successful_cases': successful_gold,
                'gold_span_recall_proxy': round(hits / gold, 4) if gold and with_evidence else None,
+               'successful_case_gold_span_recall_proxy':
+                   round(successful_hits / successful_gold, 4)
+                   if successful_gold and successful_hits is not None and with_evidence else None,
                'gold_file_recall_proxy': round(files_hit / files_total, 4) if files_total and with_evidence else None,
+               'successful_case_gold_file_recall_proxy':
+                   round(successful_file_hits / successful_files, 4)
+                   if successful_files and with_evidence else None,
                'note': 'Machine JSON recovery is not CLI success. No citation means unscored evidence, not a verified zero answer-accuracy score.'}
     (run_dir / 'results.json').write_text(json.dumps(records, indent=2, ensure_ascii=False), encoding='utf-8')
     (run_dir / 'summary.json').write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8')
+    # Keep one review row for every selected question, even after a failed
+    # subprocess. Preserve any grading already entered by the reviewer.
     csvfile = run_dir / 'review_template.csv'
-    if not csvfile.is_file():
-        with csvfile.open('w', newline='', encoding='utf-8-sig') as file:
-            w = csv.writer(file)
-            w.writerow(['id', 'suite', 'correctness_0_to_4', 'grounded_yes_no', 'notes'])
-            for row in records:
-                w.writerow([row['id'], row['suite'], '', '', ''])
+    existing = {}
+    if csvfile.is_file():
+        with csvfile.open(newline='', encoding='utf-8-sig') as file:
+            existing = {row['id']: row for row in csv.DictReader(file) if row.get('id')}
+    review_cases = cases if cases is not None else records
+    with csvfile.open('w', newline='', encoding='utf-8-sig') as file:
+        w = csv.writer(file)
+        w.writerow(['id', 'suite', 'correctness_0_to_4', 'grounded_yes_no', 'notes'])
+        for case in review_cases:
+            old = existing.get(case['id'], {})
+            w.writerow([case['id'], case['suite'], old.get('correctness_0_to_4',''),
+                        old.get('grounded_yes_no',''), old.get('notes','')])
     return summary
 
 
@@ -447,7 +478,7 @@ def main(argv=None):
         install_case_index(suite_index, run_dir / case['id'])
         result = run_case(case, projects[case['suite']], agent, run_dir, args)
         records[case['id']] = result
-        save_report(run_dir, list(records.values()), args, len(cases))
+        save_report(run_dir, list(records.values()), args, len(cases), cases=cases)
         detail = result.get('error') or result.get('cli_warning') or ''
         print(case['id'], result['status'], result['elapsed_seconds'], 'seconds',
               detail[:200], flush=True)
