@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 
-ALLOWED_TOOLS = ('search','read_source','symbol','trace','impact','flows','history','clusters')
+ALLOWED_TOOLS = ('discover_files','search','read_source','symbol','trace','impact','flows','history','clusters')
 TOKEN_RE = re.compile(r'^[\w.$ /-]{1,100}$',re.UNICODE)
 SYMBOL_RE = re.compile(r'^[A-Za-z_$][\w$]*$')
 
@@ -25,13 +25,14 @@ def parse_json(content):
 def _tools_for_plan(plan):
     intent=plan.get('intent','locate')
     symbols=plan.get('symbols') or []
-    tasks=[]
+    tasks=[{'tool':'discover_files','query':plan.get('question','')}]
+    for query in (plan.get('queries') or [])[:2]:
+        tasks.append({'tool':'search','query':query})
     for sym in symbols[:2]:
         tasks.append({'tool':'symbol','query':sym})
         if intent in ('trace','impact','data_flow'):
             tasks.append({'tool':'impact' if intent=='impact' else 'trace','query':sym})
     if intent=='data_flow':tasks.append({'tool':'flows'})
-    for query in (plan.get('queries') or [])[:2]:tasks.append({'tool':'search','query':query})
     if not tasks:tasks=[{'tool':'search','query':' '.join(re.findall(r'[A-Za-z][\w]*',plan.get('question',''))[:5])}]
     return tasks
 
@@ -54,7 +55,7 @@ def _validate_action(action):
             return None
         return {'tool':tool,'query':'','path':path,'start_line':start,'end_line':end,
                 'depth':1,'direction':'out'}
-    if tool in ('search','symbol','trace','impact'):
+    if tool in ('discover_files','search','symbol','trace','impact'):
         if not isinstance(query,str) or not TOKEN_RE.fullmatch(query.strip()):return None
         query=query.strip()
         if tool in ('symbol','trace','impact') and not SYMBOL_RE.fullmatch(query):return None
@@ -70,9 +71,10 @@ def _validate_action(action):
 
 
 def _tool_execute(repo, action):
-    from code_intelligence import (search_relevant_sources,symbol_query,trace,impact,
+    from code_intelligence import (search_file_candidates,search_relevant_sources,symbol_query,trace,impact,
                                    business_flows,git_history,clusters)
     name=action['tool'];query=action['query'];depth=action['depth']
+    if name=='discover_files':return {'candidates':search_file_candidates(repo,query,limit=8), 'note':'Filenames are navigational leads, not verified line evidence'}
     if name=='search':return search_relevant_sources(repo,query,limit=12)
     if name=='read_source':
         path=action['path'];start=action['start_line'];end=action['end_line']
@@ -123,9 +125,11 @@ def _action_suggestion(llm,question,plan,history,used,remaining):
     summary=json.dumps(history[-3:],ensure_ascii=False,default=str)[:3200]
     instructions=(
         'You direct a READ-ONLY static source investigation. Return ONLY JSON. '
-        'Choose {"action":"tool","tool":"search|read_source|symbol|trace|impact|flows|history|clusters",'
+        'Choose {"action":"tool","tool":"discover_files|search|read_source|symbol|trace|impact|flows|history|clusters",'
         '"query":"...","path":"relative/path.py","start_line":1,"end_line":60,'
         '"depth":1-4,"direction":"in|out","reason":"..."} '
+        'First discover candidate files, then search/read promising implementations. '
+        'A candidate filename is not source evidence. '
         'For read_source, use an exact path from tool evidence and a window up to 100 lines. '
         'or {"action":"finish","reason":"..."}. '
         'After locating a promising function or symbol, read its implementation before finishing. '
@@ -159,13 +163,17 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         if step>0:
             try:
                 decision=_action_suggestion(llm,question,plan,history,sorted(used),max_steps-step)
-                if decision.get('action')=='finish':break
+                if decision.get('action')=='finish':
+                    # Do not finish with only filename candidates and no source lines.
+                    if citations:break
                 if decision.get('action')=='tool':
                     selection=_validate_action(decision)
                     reason=str(decision.get('reason',''))[:120]
             except (ValueError,TypeError,RuntimeError,KeyError) as exc:
                 errors.append('Qwen tool decision fallback: '+str(exc)[:150])
         # Initial action and malformed/invalid/repeated suggestions: deterministic fallback.
+        if step == 0:
+            selection=_validate_action(actions[0])
         if selection is None or action_key(selection) in used:
             selection=next((x for proposed in actions if (x:=_validate_action(proposed))
                             and action_key(x) not in used),None)
