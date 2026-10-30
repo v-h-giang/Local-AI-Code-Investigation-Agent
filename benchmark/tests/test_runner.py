@@ -104,6 +104,8 @@ class BenchmarkTests(unittest.TestCase):
                                       project, fake_agent, root / 'results', args)
                 self.assertEqual(execute.call_args.kwargs['env']['PYTHONIOENCODING'], 'utf-8')
                 self.assertEqual(execute.call_args.kwargs['env']['PYTHONUTF8'], '1')
+                command = execute.call_args.args[0]
+                self.assertEqual(command[command.index('--timeout') + 1], '240')
                 self.assertFalse(result['machine_result_available'])
 
     def test_preflight_does_not_import_app_or_run_model(self):
