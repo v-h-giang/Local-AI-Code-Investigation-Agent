@@ -119,6 +119,44 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(report['examples_unreachable'], [])
         self.assertTrue(report['compatible'])
 
+    def test_summary_includes_failed_gold_spans_and_preserves_review_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cases = [
+                {'id': 'a', 'suite': 'repocontextbench',
+                 'gold_spans': [{'path':'a.py'}, {'path':'a.py'}]},
+                {'id': 'b', 'suite': 'repocontextbench',
+                 'gold_spans': [{'path':'b.cs'}]},
+            ]
+            args = SimpleNamespace(suite='repocontextbench', mode='ai')
+            records = [
+                {'id':'a','suite':'repocontextbench','elapsed_seconds':1,
+                 'exit_code':0,'machine_result_available':True,
+                 'valid_evidence_items':1,'citation_validity':1.0,
+                 'gold_spans':2,'gold_span_hits':1,'gold_files':1,'gold_file_hits':1},
+                {'id':'b','suite':'repocontextbench','elapsed_seconds':1,
+                 'exit_code':1,'machine_result_available':False}
+            ]
+            summary = run.save_report(root, records, args, 2, cases=cases)
+            self.assertEqual(summary['gold_spans_selected'], 3)
+            self.assertEqual(summary['gold_span_recall_proxy'], 0.3333)
+            self.assertEqual(summary['successful_case_gold_span_recall_proxy'], 0.5)
+            self.assertEqual(summary['gold_file_recall_proxy'], 0.5)
+            with (root/'review_template.csv').open(encoding='utf-8-sig') as stream:
+                import csv
+                rows=list(csv.DictReader(stream))
+            self.assertEqual(len(rows), 2)
+            rows[0]['notes']='manual grade'
+            with (root/'review_template.csv').open('w',encoding='utf-8-sig',newline='') as stream:
+                import csv
+                writer=csv.DictWriter(stream,fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+            run.save_report(root, records, args, 2, cases=cases)
+            with (root/'review_template.csv').open(encoding='utf-8-sig') as stream:
+                import csv
+                self.assertEqual(list(csv.DictReader(stream))[0]['notes'],'manual grade')
+
     def test_child_env_utf8(self):
         env = run.child_environment()
         self.assertEqual(env['PYTHONIOENCODING'], 'utf-8')
