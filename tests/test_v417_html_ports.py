@@ -96,7 +96,7 @@ class HtmlPublicationTests(unittest.TestCase):
         manifest.parent.mkdir(parents=True)
         manifest.write_text(json.dumps({'results':[{'id':'INV-001','markdown':str(inv/'result.md')}]})+'\n',encoding='utf-8')
         ReportSession(self.out).finalize()
-        item=json.loads(manifest.read_text())['results'][0]
+        item=json.loads(manifest.read_text(encoding='utf-8'))['results'][0]
         self.assertEqual(item['html'],str(inv/'result.html'))
         self.assertNotIn('markdown',item)
 
@@ -110,7 +110,7 @@ class HtmlPublicationTests(unittest.TestCase):
         session.finalize()
         self.assertFalse((investigation/'result.md').exists())
         self.assertTrue((investigation/'result.html').exists())
-        self.assertIn('INV-001/result.html',(investigation.parent/'index.html').read_text())
+        self.assertIn('INV-001/result.html',(investigation.parent/'index.html').read_text(encoding='utf-8'))
         self.assertTrue((out/'middle-files'/'report-sources'/'investigations'/'INV-001'/'result.md').exists())
         session.restore()
         self.assertTrue((investigation/'result.md').exists())
