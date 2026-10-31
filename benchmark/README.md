@@ -49,6 +49,33 @@ regressions at 8 and 20 files. Compare with baseline micro recall @8=0.2203
 and @20=0.3390 **only if the old index and 20 cases are the same**. Any source
 graph connections remain candidate-only and do not prove runtime execution.
 
+## V5.10 experimental retrieval fusion — opt-in, offline
+
+Diagnosis on RepoContextBench showed that the source index contains all gold
+files, but KB concepts match only 8/20 questions; the KB reaches a gold
+file in 4/20 cases while the top-20 recall is unchanged. The next step is
+**not** to add benchmark-specific keywords. V5.10 tests an independent
+source-evidence fusion strategy while keeping production V5.9 unchanged.
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\inspect_candidates.py `
+  --from-run universal_kb_offline_fresh_1 `
+  --suite repocontextbench `
+  --limit 20 `
+  --fusion `
+  --compare `
+  --summary-only
+```
+
+Compare `fusion_experiment.comparison_vs_baseline` against the existing
+`comparison`. The experimental fusion protects baseline top-8, then
+reserves at most four exploration positions from KB, symbols, source path
+tokens, and one-hop source graph. The same SQLite index and pinned repo are
+used, with no Ollama. It is **not** automatically enabled for ordinary
+`architecture` or `investigate` commands, and a higher score on these 20
+cases alone would not justify claiming general improvement. Evaluate an
+unseen repository and measure latency before adopting it.
+
 ## Diagnose V5.9.1 without another AI benchmark
 
 When paired recall does not improve, identify **where** the missing gold
