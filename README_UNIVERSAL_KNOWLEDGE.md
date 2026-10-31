@@ -60,6 +60,7 @@ git pull origin main
 .\.venv\Scripts\python.exe agent.py --project . knowledge status
 .\.venv\Scripts\python.exe agent.py --project . knowledge build
 .\.venv\Scripts\python.exe agent.py --project . knowledge query "How do we resume a workflow?"
+.\.venv\Scripts\python.exe agent.py --project . knowledge related workflow.checkpoint
 ```
 
 To use a different global SQLite file, pass `--kb-path "D:\knowledge\global.sqlite"` or set the environment variable `LOCAL_CODE_AGENT_KB_PATH`.
@@ -69,6 +70,7 @@ To use a different global SQLite file, pass `--kb-path "D:\knowledge\global.sqli
 ```powershell
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" intelligence --out "D:\SourceAnalysis"
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" symbol advance --out "D:\SourceAnalysis"
+.\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" technologies --out "D:\SourceAnalysis"
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" investigate "Where is the Fortran solver initialized?" --non-ai --out "D:\SourceAnalysis"
 ```
 
