@@ -152,7 +152,10 @@ class Repo:
         signature, count = self._index_signature()
         if self.db_path.is_file():
             try:
-                with sqlite3.connect(self.db_path) as conn:
+                # sqlite3 connection contexts do not close file handles on exit.
+                # Explicit close is required for TemporaryDirectory cleanup on Windows.
+                from contextlib import closing
+                with closing(sqlite3.connect(self.db_path)) as conn:
                     old = conn.execute("SELECT value FROM index_metadata WHERE key='signature'").fetchone()
                     if old and old[0] == signature:
                         return {'status':'up-to-date','files':count,'database':str(self.db_path)}
