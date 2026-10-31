@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import closing
 from collections import Counter
 from pathlib import Path
 
@@ -130,7 +131,9 @@ def suggest_investigations(repo, out='output/architecture', top=20, *, llm=None,
         priority = 'P0' if score >= 85 else 'P1' if score >= 65 else 'P2'
         candidates.append(_q(kind, name, f'{path}:{line}', priority, group, reason, score))
 
-    with sqlite3.connect(index['index']) as conn:
+    # The sqlite3 context manager only commits/rolls back; it never closes.
+    # Explicitly close before TemporaryDirectory cleanup, especially on Windows.
+    with closing(sqlite3.connect(index['index'])) as conn:
         conn.row_factory = sqlite3.Row
         endpoints = conn.execute('SELECT path,line,protocol,value FROM endpoints ORDER BY path,line LIMIT 500').fetchall()
         for r in endpoints:
