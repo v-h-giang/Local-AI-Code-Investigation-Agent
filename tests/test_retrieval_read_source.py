@@ -138,6 +138,44 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertIn('declarative-agents/workflow-samples/README.md',
                       {item['path'] for item in results})
 
+    def test_v53_executability_question_preserves_evidence_roles(self):
+        docs=self.root/'declarative-agents'/'workflow-samples'
+        docs.mkdir(parents=True)
+        (docs/'README.md').write_text(
+            'Workflow YAML can be loaded and executed as a declarative workflow.\n',
+            encoding='utf-8')
+        samples=self.root/'python'/'samples'/'03-workflows'/'declarative'
+        samples.mkdir(parents=True)
+        (samples/'run_workflow.py').write_text(
+            'def run_workflow():\n    return load_declarative_yaml()\n',
+            encoding='utf-8')
+        tests=self.root/'python'/'packages'/'declarative'/'tests'
+        tests.mkdir(parents=True)
+        (tests/'test_workflow_samples_integration.py').write_text(
+            'def test_load_declarative_yaml():\n    assert True\n',
+            encoding='utf-8')
+        # Repeated relevant class names must not crowd out the three distinct
+        # roles of evidence needed for documentation-vs-execution questions.
+        dotnet=self.root/'dotnet'/'src'/'DeclarativeWorkflows'
+        dotnet.mkdir(parents=True)
+        for i in range(20):
+            (dotnet/('DeclarativeWorkflow%d.cs' % i)).write_text(
+                'class DeclarativeWorkflow%d { /* YAML workflow */ }\n' % i,
+                encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name)/'output',verbose=False)
+        matches=search_file_candidates(
+            self.repo,'Are declarative workflow YAML files only documentation '
+                      'examples or can they be loaded and executed like code?',
+            limit=8)
+        roles={row['file_role'] for row in matches}
+        self.assertIn('documentation',roles)
+        self.assertIn('sample',roles)
+        self.assertIn('test',roles)
+        self.assertIn('implementation',roles)
+        self.assertIn('declarative-agents/workflow-samples/README.md',
+                      {row['path'] for row in matches})
+        self.assertTrue(all(row['citation'] is False for row in matches))
+
     def test_v5_dotnet_checkpoint_keeps_implementation(self):
         (self.root / 'dotnet' / 'src').mkdir(parents=True)
         (self.root / 'python' / 'samples').mkdir(parents=True)
