@@ -190,6 +190,34 @@ def valid_ref(project, ref):
     return path, line
 
 
+def valid_candidate_file(project, path):
+    """Validate a navigational file candidate without granting it line evidence."""
+    if not isinstance(path, str) or not path or '\\' in path or ':' in path:
+        return None
+    root=Path(project).resolve()
+    file=(root / path).resolve()
+    if (Path(path).is_absolute() or '..' in Path(path).parts
+            or not file.is_relative_to(root) or not file.is_file()):
+        return None
+    return path
+
+
+def visible_tool_refs(project, investigation):
+    """Count only real path:line locations retained in the model's tool history."""
+    refs=set()
+    for step in (investigation.get('steps') or []):
+        if not isinstance(step,dict):
+            continue
+        for raw in (step.get('source_refs') or []):
+            if not isinstance(raw,str) or ':' not in raw:
+                continue
+            path, _, line=raw.rpartition(':')
+            validated=valid_ref(project,{'path':path,'line':line})
+            if validated:
+                refs.add(validated)
+    return refs
+
+
 def score_evidence(project, case, record):
     raw = record.get('evidence', [])
     raw = raw if isinstance(raw, list) else []
@@ -201,11 +229,32 @@ def score_evidence(project, case, record):
     gold_files = {x['path'] for x in gold}
     referenced_files = {path for path, _ in refs}
     file_hits = len(gold_files & referenced_files)
+    investigation = record.get('investigation') or {}
+    discovered=investigation.get('file_discovery') or {}
+    candidates=(discovered.get('candidates') or [])[:8]
+    candidate_files={path for item in candidates if isinstance(item,dict)
+                     if (path:=valid_candidate_file(project,item.get('path')))}
+    observed_refs=visible_tool_refs(project,investigation)
+    observed_files={path for path,_ in observed_refs}
+    observed_spans=sum(any(path==span['path']
+                       and span['start_line']<=line<=span['end_line']
+                       for path,line in observed_refs) for span in gold)
+    candidate_file_hits=len(candidate_files & gold_files)
+    observed_file_hits=len(observed_files & gold_files)
     return {
         'evidence_items': len(rows), 'valid_evidence_items': len(refs),
         'citation_validity': round(len(refs) / len(rows), 4) if rows else None,
         'gold_spans': len(gold), 'gold_span_hits': hits,
         'gold_files': len(gold_files), 'gold_file_hits': file_hits,
+        'candidate_files': len(candidate_files),
+        'candidate_gold_file_hits': candidate_file_hits,
+        'candidate_file_recall_at_8': round(candidate_file_hits / len(gold_files),4)
+                                      if gold_files else None,
+        'observed_gold_file_hits': observed_file_hits,
+        'observed_file_recall': round(observed_file_hits / len(gold_files),4)
+                                if gold_files else None,
+        'observed_gold_span_hits': observed_spans,
+        'observed_span_recall': round(observed_spans / len(gold),4) if gold else None,
         'gold_file_recall_proxy': round(file_hits / len(gold_files), 4) if gold_files else None,
         'gold_span_recall_proxy': round(hits / len(gold), 4) if gold else None,
     }
@@ -336,6 +385,9 @@ def save_report(run_dir, records, args, selected_count, cases=None):
         files_total = sum(x.get('gold_files', 0) for x in records)
     hits = sum(x.get('gold_span_hits', 0) for x in records)
     files_hit = sum(x.get('gold_file_hits', 0) for x in records)
+    candidate_hits = sum(x.get('candidate_gold_file_hits',0) for x in records)
+    observed_file_hits = sum(x.get('observed_gold_file_hits',0) for x in records)
+    observed_span_hits = sum(x.get('observed_gold_span_hits',0) for x in records)
     # A saved JSON is evidence of execution, not of a successful CLI call.
     failed = sum(x.get('exit_code') != 0 or not x.get('machine_result_available', False)
                  for x in records)
@@ -361,6 +413,11 @@ def save_report(run_dir, records, args, selected_count, cases=None):
                    round(successful_hits / successful_gold, 4)
                    if successful_gold and successful_hits is not None and with_evidence else None,
                'gold_file_recall_proxy': round(files_hit / files_total, 4) if files_total and with_evidence else None,
+               'candidate_file_recall_at_8': round(candidate_hits / files_total, 4)
+                                             if files_total else None,
+               'observed_file_recall': round(observed_file_hits / files_total, 4)
+                                       if files_total else None,
+               'observed_span_recall': round(observed_span_hits / gold, 4) if gold else None,
                'successful_case_gold_file_recall_proxy':
                    round(successful_file_hits / successful_files, 4)
                    if successful_files and with_evidence else None,
