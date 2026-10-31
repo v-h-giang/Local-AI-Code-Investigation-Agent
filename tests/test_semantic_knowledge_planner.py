@@ -101,6 +101,34 @@ class SemanticKnowledgePlannerTests(unittest.TestCase):
             self.assertTrue(plan["queries"])
             self.assertFalse(plan["knowledge_prompt_used"])
 
+    def test_qwen_plan_queries_add_secondary_file_candidates(self):
+        from investigation_loop import investigate_iteratively
+        model=CaptureModel('{"action":"finish"}')
+        # Question and file do not share a term; the model's normalized
+        # technical search query is what links them.
+        result=investigate_iteratively(
+            self.repo,"Where is the invisible staging sequence?",
+            model,{"intent":"locate","queries":["restart"],
+                   "symbols":[],"graph_depth":1,"analysis_goals":[]},
+            max_steps=1,review_rounds=0,planner="qwen-json-plan")
+        paths=[r["path"] for r in result["file_discovery"]["candidates"]]
+        self.assertIn("module.f90",paths)
+        self.assertGreaterEqual(
+            result["file_discovery"].get("qwen_secondary_candidates",0),1)
+        self.assertTrue(all(not item.get("citation",False)
+                            for item in result["file_discovery"]["candidates"]))
+
+    def test_lexical_fallback_does_not_trust_plan_for_extra_discovery(self):
+        from investigation_loop import investigate_iteratively
+        result=investigate_iteratively(
+            self.repo,"Where is the invisible staging sequence?",
+            CaptureModel('{"action":"finish"}'),
+            {"intent":"locate","queries":["restart"],"symbols":[],
+             "graph_depth":1,"analysis_goals":[]},
+            max_steps=1,review_rounds=0,planner="lexical-fallback")
+        self.assertEqual(
+            result["file_discovery"].get("qwen_secondary_candidates",0),0)
+
     def test_without_model_never_calls_semantic_planner(self):
         with patch("code_intelligence._plan_with_qwen",
                    side_effect=AssertionError("model used")):
