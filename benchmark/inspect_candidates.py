@@ -121,6 +121,8 @@ def diagnose_case(repo, case, baseline_ranked, v59_ranked):
     misses=gold-{r['path'] for r in v59_ranked[:20]}
     if not gold.issubset(indexed):
         obstacle='gold-not-indexed'
+    elif not misses:
+        obstacle='all-gold-top20'
     elif not concepts:
         obstacle='no-concept-matched'
     elif not aliases:
@@ -131,10 +133,8 @@ def diagnose_case(repo, case, baseline_ranked, v59_ranked):
         obstacle='kb-discovery-missed-gold'
     elif misses & set(kb_paths):
         obstacle='kb-gold-found-but-outside-top20'
-    elif misses:
-        obstacle='gold-missed-by-other-retrieval'
     else:
-        obstacle='all-gold-top20'
+        obstacle='gold-missed-by-other-retrieval'
     return {
         'id':case['id'],
         'gold_files':len(gold),
