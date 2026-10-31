@@ -673,7 +673,7 @@ def search_file_candidates(repo, query, limit=6, *, strategy='v59'):
                 if any(t in path_parts for t in ('checkpoint','checkpointing','checkpoints')):
                     score+=8
             # Avoid over-ranking an unrelated response/request model.
-            if not any(w not in _FILE_COMMON for w in matched) and not content_terms:
+            if not any(w not in _FILE_COMMON for w in matched) and not content_terms and not kb_evidence:
                 score-=5
             if score>0:
                 kind=('test' if '/tests/' in normalized or normalized.startswith('tests/')
