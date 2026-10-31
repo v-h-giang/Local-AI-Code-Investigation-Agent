@@ -89,8 +89,15 @@ def configured_extensions(root=ROOT):
         for node in tree.body:
             if isinstance(node, ast.Assign):
                 if any(isinstance(t, ast.Name) and t.id == variable for t in node.targets):
+                    # The production scanners now use a centralized registry.
+                    # Preserve static AST-only preflight: never import app modules.
+                    if (variable in ('EXTENSIONS','CODE_EXTS')
+                            and isinstance(node.value,ast.Name)
+                            and node.value.id=='SOURCE_EXTENSIONS'):
+                        registry=values('language_registry.py','LANGUAGE_EXTENSIONS')
+                        return {ext for variants in registry.values() for ext in variants}
                     value = ast.literal_eval(node.value)
-                    return set(value)
+                    return value if isinstance(value,dict) else set(value)
         raise RuntimeError('Cannot find ' + variable + ' in ' + file)
 
     accessible = values('codebase.py', 'EXTENSIONS')
