@@ -191,7 +191,7 @@ def _action_suggestion(llm,question,plan,history,used,remaining,file_discovery=N
     summary=json.dumps(history[-3:],ensure_ascii=False,default=str)[:2600]
     instructions=(
         'You direct a READ-ONLY static source investigation. Return ONLY JSON. '
-        'Choose {"action":"tool","tool":"discover_files|search_file|search|read_source|symbol|trace|impact|flows|history|clusters",'
+        'Choose {"action":"tool","tool":"search_file|search|read_source|symbol|trace|impact|flows|history|clusters",'
         '"query":"...","path":"relative/path.py","start_line":1,"end_line":60,'
         '"depth":1-4,"direction":"in|out","reason":"..."} '
         'Use already discovered file candidates; prioritize read_source or search_file on likely implementations. '
@@ -248,6 +248,8 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
                     if citations:break
                 if decision.get('action')=='tool':
                     selection=_validate_action(decision)
+                    # Discovery already ran for free; do not spend a step repeating it.
+                    if selection and selection['tool']=='discover_files':selection=None
                     reason=str(decision.get('reason',''))[:120]
             except (ValueError,TypeError,RuntimeError,KeyError) as exc:
                 errors.append('Qwen tool decision fallback: '+str(exc)[:150])
