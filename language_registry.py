@@ -37,7 +37,7 @@ LANGUAGE_EXTENSIONS = {
     "json": (".json", ".jsonl"),
     "toml": (".toml",),
     "markdown": (".md", ".mdx"),
-    "config": (".properties", ".gradle", ".conf", ".ini", ".cfg", ".env.example", ".proto", ".tf", ".tfvars", ".hcl"),
+    "config": (".properties", ".gradle", ".conf", ".ini", ".cfg", ".tf", ".tfvars", ".hcl"),
     "actionscript": (".as", ".actionscript"),
     "text": (".txt",),
     "cobol": (".cob", ".cbl", ".cpy"),
@@ -46,7 +46,7 @@ LANGUAGE_EXTENSIONS = {
 }
 SOURCE_EXTENSIONS = frozenset(ext for variants in LANGUAGE_EXTENSIONS.values() for ext in variants)
 SPECIAL_FILENAMES = frozenset({
-    "Dockerfile", "Containerfile", "Makefile", "GNUmakefile",
+    "Dockerfile", "Containerfile", "Makefile", "GNUmakefile", ".env.example",
     "CMakeLists.txt", "Jenkinsfile", "Gemfile", "Rakefile",
     "go.mod", "go.sum", "Cargo.lock", "Pipfile", "Procfile",
     "BUILD", "BUILD.bazel", "WORKSPACE", "WORKSPACE.bazel",
