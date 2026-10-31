@@ -9,7 +9,7 @@
 The agent now has a multi-language file registry, optional Tree-sitter and
 conservative lexical declaration adapters, a versioned SQLite global programming
 concept database, repository module profiles, and an opt-in import bridge for
-pre-exported LSP symbol locations. The global KB has **31 curated seed concepts**,
+pre-exported LSP symbol locations. The global KB has **126 curated seed concepts across six packs**,
 not encyclopedic coverage. These are search hints, **never source citations**.
 
 See [Universal Knowledge guide](README_UNIVERSAL_KNOWLEDGE.md) for the clickable
