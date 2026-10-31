@@ -175,7 +175,7 @@
       ]
     },
     {
-      "id": "ml.training",
+      "id": "ml.model_training",
       "domain": "data",
       "label": "Model training",
       "description": "Training adjusts model parameters to optimize a loss over training data.",
@@ -188,7 +188,7 @@
       ]
     },
     {
-      "id": "ml.inference",
+      "id": "ml.model_inference",
       "domain": "data",
       "label": "Model inference",
       "description": "Inference applies learned parameters to inputs to produce outputs.",
