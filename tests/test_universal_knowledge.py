@@ -11,7 +11,7 @@ from unittest.mock import patch
 from architecture import _scan
 from codebase import Repo
 from code_intelligence import build_intelligence, symbol_query, search_file_candidates
-from knowledge_base import (build_knowledge, query_knowledge, expand_query_terms,
+from knowledge_base import (build_knowledge, query_knowledge, related_concepts, expand_query_terms,
                             knowledge_status)
 from language_registry import language_for, is_source_file
 from lsp_bridge import import_lsp_locations, lookup_lsp_locations
@@ -43,6 +43,9 @@ class UniversalKnowledgeTests(unittest.TestCase):
                              db_path=self.kb)
         self.assertIn("workflow.checkpoint",{h["concept_id"] for h in hits})
         self.assertTrue(all(h["citation"] is False for h in hits))
+        links=related_concepts("workflow.checkpoint",db_path=self.kb)
+        self.assertIn("workflow.persistence",{item["concept_id"] for item in links})
+        self.assertTrue(all(item["citation"] is False for item in links))
         self.assertIn("checkpointing",expand_query_terms(
             "How to resume a workflow?",db_path=self.kb))
 
