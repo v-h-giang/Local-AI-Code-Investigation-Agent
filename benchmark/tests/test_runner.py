@@ -38,6 +38,25 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(summary['zero_hit_case_ids_at_8'],['b'])
         self.assertEqual(summary['zero_hit_case_ids_at_20'],[])
 
+    def test_v59_ab_comparison_tracks_regressions_and_gains(self):
+        from inspect_candidates import compare_candidate_results
+        def item(cid,gold,a,b):
+            return {'id':cid,'gold_files':gold,
+                    'candidate_gold_hits_at_8':a,'candidate_gold_hits_at_20':b,
+                    'candidate_recall_at_8':round(a/gold,4),
+                    'candidate_recall_at_20':round(b/gold,4)}
+        before=[item('a',3,1,2),item('b',2,1,1)]
+        after=[item('a',3,2,3),item('b',2,0,1)]
+        comparison=compare_candidate_results(before,after)
+        self.assertEqual(comparison['baseline']['gold_hits_at_8'],2)
+        self.assertEqual(comparison['v59']['gold_hits_at_8'],2)
+        self.assertEqual(comparison['delta']['micro_recall_at_8'],0.0)
+        self.assertEqual(comparison['delta']['micro_recall_at_20'],0.2)
+        self.assertEqual(comparison['case_changes']['at_8']['improved_cases'][0]['id'],'a')
+        self.assertEqual(comparison['case_changes']['at_8']['regressed_cases'][0]['id'],'b')
+        with self.assertRaises(ValueError):
+            compare_candidate_results(before,after[:1])
+
     def test_dataset_exactly_30(self):
         cases = run.read_cases()
         self.assertEqual(len(cases), 30)
