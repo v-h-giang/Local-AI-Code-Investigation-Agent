@@ -20,6 +20,7 @@ from typing import Optional
 from architecture import _scan, _module, load_architecture
 from language_registry import grammar_for
 from universal_symbols import lexical_symbols
+from repository_knowledge import ensure_module_schema, refresh_module_profiles
 from codebase import Repo
 
 SCHEMA_VERSION = '49.3'
@@ -48,6 +49,7 @@ def _setup(conn):
     conn.executescript('''
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, signature TEXT, module TEXT, ext TEXT);
+    CREATE TABLE IF NOT EXISTS module_profiles (module TEXT NOT NULL,language TEXT NOT NULL,file_count INTEGER NOT NULL,symbol_count INTEGER NOT NULL,PRIMARY KEY(module,language));
     CREATE TABLE IF NOT EXISTS symbols (id TEXT PRIMARY KEY, path TEXT, line INTEGER, end_line INTEGER, name TEXT, kind TEXT, owner TEXT, signature TEXT, module TEXT);
     CREATE INDEX IF NOT EXISTS symbols_name ON symbols(name);
     CREATE INDEX IF NOT EXISTS symbols_file ON symbols(path);
@@ -345,6 +347,11 @@ def build_intelligence(repo:Repo,out='output/architecture', *,verbose=True):
         else:
             calls=conn.execute("SELECT COUNT(*) FROM relations WHERE kind='calls-candidate'").fetchone()[0]
             if verbose:print('[Intelligence] Unchanged source and graph; reusing resolved edges.',flush=True)
+        # Repository-local knowledge: derived only from indexed source metadata.
+        # Do not confuse this inventory with global programming concepts.
+        if changed or deleted or new_schema or not conn.execute(
+                "SELECT 1 FROM module_profiles LIMIT 1").fetchone():
+            refresh_module_profiles(conn)
         conn.commit()
         symbols=conn.execute('SELECT COUNT(*) FROM symbols').fetchone()[0]
         relations=conn.execute('SELECT COUNT(*) FROM relations').fetchone()[0]
