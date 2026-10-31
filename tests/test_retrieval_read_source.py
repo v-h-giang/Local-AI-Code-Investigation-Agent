@@ -70,6 +70,15 @@ class SourceRetrievalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             search_file_locations(self.repo,'../secret.py','resume')
 
+    def test_scoped_search_expands_parallel_to_concurrent(self):
+        (self.root / 'concurrent.py').write_text(
+            'class ConcurrentGroup:\n    def concurrent_tasks(self):\n'
+            '        return 1\n', encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name) / 'output',verbose=False)
+        hits=search_file_locations(self.repo,'concurrent.py','parallel',limit=5)
+        self.assertTrue(hits)
+        self.assertTrue(all(hit['path']=='concurrent.py' for hit in hits))
+
     def test_source_window_uses_real_visible_line_refs(self):
         lines=['%5d | line number %s' % (i,i) for i in range(1,70)]
         lines[43]='   44 | def restore_session():'
