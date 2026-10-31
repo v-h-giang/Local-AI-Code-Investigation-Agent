@@ -68,7 +68,8 @@ class BenchmarkTests(unittest.TestCase):
                     'file_discovery':{'candidates':[
                         {'path':'a.py','citation':False},
                         {'path':'../outside.py','citation':False}]},
-                    'steps':[{'tool':'search_file','source_refs':['a.py:2']}]}
+                    'steps':[{'tool':'read_source','source_refs':['b.py:1'],
+                              'observation':{'visible_refs':['a.py:2']}}]}
             }
             result=run.score_evidence(root,case,record)
             self.assertEqual(result['candidate_file_recall_at_8'],1.0)
