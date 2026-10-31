@@ -144,17 +144,32 @@ def _source_observation_window(value, question, max_chars):
         begin=max(0,min(anchor-width//2,len(numbered)-width))
         selected=numbered[begin:begin+width]
         if not selected:continue
+        # The LLM can read every displayed line; cite only the strongest
+        # source lines rather than automatically reporting the whole window.
+        def rank_line(entry):
+            text=entry[1].lower()
+            return sum(3 for token in terms if token in text) + (
+                2 if re.search(r'\b(?:def|class|function|return|public|private)\b',
+                               text) else 0)
+        best_lines=sorted(selected,key=rank_line,reverse=True)[:6]
         result={'path':value['path'],'start_line':selected[0][0],
                 'end_line':selected[-1][0],
                 'content':'\n'.join(raw for _,raw in selected),
-                'source_refs':[f'{value["path"]}:{line}' for line,_ in selected],
+                'visible_refs':[f'{value["path"]}:{line}' for line,_ in selected],
+                'source_refs':[f'{value["path"]}:{line}' for line,_ in best_lines],
                 'windowed':len(selected)<len(numbered)}
         best=result
         if len(json.dumps(result,ensure_ascii=False))<=max_chars:
             return result
-    # Even a very long source line is bounded to the observation budget.
+    # If even one source line is oversized, never cite content we truncated.
     if best is None:return {'path':value['path'],'content':'','source_refs':[]}
     best['content']=best['content'][:max(0,max_chars-240)]
+    displayed={int(match.group(1)) for line in best['content'].splitlines()
+               if (match:=re.match(r'^\s*(\d+) \| ',line))}
+    best['visible_refs']=[ref for ref in best['visible_refs']
+                          if int(ref.rpartition(':')[2]) in displayed]
+    best['source_refs']=[ref for ref in best['source_refs']
+                         if ref in best['visible_refs']]
     return best
 
 
