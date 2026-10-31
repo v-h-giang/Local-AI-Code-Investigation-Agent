@@ -44,6 +44,14 @@ py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --res
 py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --resume --retry-failed
 ```
 
+Targeted three-question regression (new run ID, no need to process all 30 questions):
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\run.py --suite repocontextbench --mode ai --fetch-repos --run-id retrieval_v4_smoke --llm-timeout 600 --case-id repo_context_bench_agent_framework_practical_0001 --case-id repo_context_bench_agent_framework_practical_0011 --case-id repo_context_bench_agent_framework_practical_0018
+```
+
+`--case-id` is repeatable and selects only the specified frozen question IDs; unknown IDs are rejected before running the model.
+
 Short offline-LLM baseline (requires downloaded source checkout but no Ollama):
 
 ```powershell
