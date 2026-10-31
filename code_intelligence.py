@@ -18,6 +18,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Optional
 from architecture import _scan, _module, load_architecture
+from language_registry import grammar_for
 from codebase import Repo
 
 SCHEMA_VERSION = '49.3'
@@ -89,7 +90,7 @@ def _ast_symbols(path, source):
 
     Grammar errors or unsupported languages always fall back to lexical symbols.
     """
-    language = {'.java':'java', '.as':'actionscript', '.cs':'c_sharp'}.get(Path(path).suffix.lower())
+    language = grammar_for(path)
     if not language:return []
     try:
         from tree_sitter_language_pack import get_parser
