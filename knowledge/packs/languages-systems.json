@@ -1,0 +1,341 @@
+{
+  "schema_version": 1,
+  "pack_id": "languages-systems",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "concepts": [
+    {
+      "id": "fortran.module",
+      "domain": "languages",
+      "label": "Fortran module",
+      "description": "Fortran MODULE groups declarations and procedures; USE brings a module's accessible names into scope.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Fortran module",
+        "fortran module",
+        "module procedure",
+        "use module"
+      ]
+    },
+    {
+      "id": "fortran.allocatable",
+      "domain": "languages",
+      "label": "Fortran allocatable arrays",
+      "description": "Allocatable variables obtain storage at runtime, often with ALLOCATE and automatic deallocation on scope exit.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Fortran allocatable arrays",
+        "allocatable",
+        "allocate array",
+        "deallocate"
+      ]
+    },
+    {
+      "id": "fortran.coarray",
+      "domain": "languages",
+      "label": "Fortran coarray programming",
+      "description": "Coarrays support SPMD-style programming with images and synchronization constructs.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Fortran coarray programming",
+        "coarray",
+        "coindexed",
+        "sync all"
+      ]
+    },
+    {
+      "id": "fortran.pure",
+      "domain": "languages",
+      "label": "Fortran PURE procedure",
+      "description": "PURE procedures have restrictions on side effects and argument modifications.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Fortran PURE procedure",
+        "pure subroutine",
+        "pure function",
+        "elemental procedure"
+      ]
+    },
+    {
+      "id": "fortran.iso_c_binding",
+      "domain": "languages",
+      "label": "Fortran C interoperability",
+      "description": "ISO_C_BINDING and BIND(C) expose interoperable types and procedures across Fortran and C.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Fortran C interoperability",
+        "iso_c_binding",
+        "bind(c)",
+        "c_ptr",
+        "c_f_pointer"
+      ]
+    },
+    {
+      "id": "c.memory",
+      "domain": "languages",
+      "label": "C pointer lifetime",
+      "description": "Manual storage management requires ownership discipline and correct allocation/deallocation pairing.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "C pointer lifetime",
+        "malloc",
+        "free",
+        "pointer lifetime",
+        "dangling pointer"
+      ]
+    },
+    {
+      "id": "cpp.raii",
+      "domain": "languages",
+      "label": "C++ RAII",
+      "description": "Resource Acquisition Is Initialization ties resource lifetime to object lifetime and deterministic destruction.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "C++ RAII",
+        "raii",
+        "unique_ptr",
+        "destructor",
+        "resource ownership"
+      ]
+    },
+    {
+      "id": "cpp.templates",
+      "domain": "languages",
+      "label": "C++ templates",
+      "description": "Compile-time parameterization supports generic functions and types.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "C++ templates",
+        "template specialization",
+        "typename",
+        "template function"
+      ]
+    },
+    {
+      "id": "cpp.move",
+      "domain": "languages",
+      "label": "C++ move semantics",
+      "description": "Move operations transfer resources between objects where type-specific move behavior permits.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "C++ move semantics",
+        "std::move",
+        "move constructor",
+        "rvalue reference"
+      ]
+    },
+    {
+      "id": "rust.ownership",
+      "domain": "languages",
+      "label": "Rust ownership",
+      "description": "Ownership and move rules establish which value owns a resource; borrowing controls references.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Rust ownership",
+        "ownership",
+        "move semantics rust",
+        "borrow checker"
+      ]
+    },
+    {
+      "id": "rust.lifetimes",
+      "domain": "languages",
+      "label": "Rust lifetimes",
+      "description": "Lifetimes describe reference validity relationships without extending object lifetime.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Rust lifetimes",
+        "lifetime annotation",
+        "borrowed reference",
+        "'a"
+      ]
+    },
+    {
+      "id": "rust.traits",
+      "domain": "languages",
+      "label": "Rust traits",
+      "description": "Traits describe shared behavioral interfaces and constraints on generic types.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Rust traits",
+        "trait",
+        "impl trait",
+        "trait bounds"
+      ]
+    },
+    {
+      "id": "go.goroutines",
+      "domain": "languages",
+      "label": "Go goroutines",
+      "description": "Goroutines are lightweight concurrently executing functions scheduled by the Go runtime.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Go goroutines",
+        "goroutine",
+        "go routine",
+        "go func"
+      ]
+    },
+    {
+      "id": "go.channels",
+      "domain": "languages",
+      "label": "Go channels",
+      "description": "Channels exchange typed values and can coordinate goroutines.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Go channels",
+        "chan",
+        "channel send",
+        "select statement"
+      ]
+    },
+    {
+      "id": "go.interfaces",
+      "domain": "languages",
+      "label": "Go interfaces",
+      "description": "Interface satisfaction is structural and based on method sets.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Go interfaces",
+        "interface method set",
+        "implements interface",
+        "go interface"
+      ]
+    },
+    {
+      "id": "python.asyncio",
+      "domain": "languages",
+      "label": "Python asyncio",
+      "description": "The asyncio event loop coordinates coroutine execution and asynchronous I/O.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Python asyncio",
+        "asyncio",
+        "async def",
+        "await",
+        "create_task"
+      ]
+    },
+    {
+      "id": "python.gil",
+      "domain": "languages",
+      "label": "Python GIL",
+      "description": "CPython threading behavior depends on interpreter builds and runtime version, including GIL variants.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Python GIL",
+        "gil",
+        "global interpreter lock",
+        "free threaded python"
+      ]
+    },
+    {
+      "id": "java.completablefuture",
+      "domain": "languages",
+      "label": "Java CompletableFuture",
+      "description": "CompletableFuture composes asynchronous results and completion stages.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Java CompletableFuture",
+        "completablefuture",
+        "completionstage",
+        "thencompose"
+      ]
+    },
+    {
+      "id": "java.synchronized",
+      "domain": "languages",
+      "label": "Java synchronization",
+      "description": "Java monitors and synchronized blocks provide mutual exclusion and memory visibility guarantees.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Java synchronization",
+        "synchronized",
+        "volatile",
+        "happens-before"
+      ]
+    },
+    {
+      "id": "csharp.task",
+      "domain": "languages",
+      "label": "C# async Task",
+      "description": "Task and async/await represent asynchronous operations in .NET.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "C# async Task",
+        "Task<T>",
+        "async task",
+        "await task"
+      ]
+    },
+    {
+      "id": "kotlin.coroutines",
+      "domain": "languages",
+      "label": "Kotlin coroutines",
+      "description": "Suspend functions and structured concurrency represent asynchronous work.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Kotlin coroutines",
+        "suspend fun",
+        "kotlin coroutine",
+        "coroutine scope"
+      ]
+    },
+    {
+      "id": "swift.concurrency",
+      "domain": "languages",
+      "label": "Swift structured concurrency",
+      "description": "Swift async/await, tasks, and actors help structure concurrent code.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "Swift structured concurrency",
+        "swift actor",
+        "swift async",
+        "task group"
+      ]
+    },
+    {
+      "id": "hpc.openmp",
+      "domain": "languages",
+      "label": "OpenMP parallel regions",
+      "description": "OpenMP directives or pragmas define shared-memory parallel regions and data-sharing properties.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "OpenMP parallel regions",
+        "openmp",
+        "omp parallel",
+        "parallel do",
+        "omp do"
+      ]
+    },
+    {
+      "id": "hpc.mpi",
+      "domain": "languages",
+      "label": "MPI message passing",
+      "description": "MPI processes communicate through explicit collective and point-to-point operations.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "MPI message passing",
+        "mpi",
+        "mpi_send",
+        "mpi_recv",
+        "mpi_comm"
+      ]
+    },
+    {
+      "id": "gpu.cuda",
+      "domain": "languages",
+      "label": "CUDA kernels",
+      "description": "CUDA launches device kernels with explicitly managed execution configuration and memory semantics.",
+      "source": "https://en.cppreference.com/w/",
+      "aliases": [
+        "CUDA kernels",
+        "cuda",
+        "__global__",
+        "cudaMemcpy",
+        "gpu kernel"
+      ]
+    }
+  ],
+  "relations": []
+}
