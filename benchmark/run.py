@@ -452,6 +452,8 @@ def main(argv=None):
     p.add_argument('--suite', choices=['all', 'repocontextbench', 'stackrepoqa'], default='all')
     p.add_argument('--mode', choices=['ai', 'non-ai'], default='ai')
     p.add_argument('--limit', type=int)
+    p.add_argument('--case-id', action='append', default=[],
+                   help='Select exact benchmark question IDs; repeat to select multiple')
     p.add_argument('--fetch-repos', action='store_true')
     p.add_argument('--repocontextbench-path', type=Path)
     p.add_argument('--stackrepoqa-path', type=Path)
@@ -473,6 +475,13 @@ def main(argv=None):
     if args.llm_timeout < 1 or args.timeout < 1:
         p.error('--llm-timeout and --timeout must be positive seconds')
     cases = [c for c in read_cases() if args.suite == 'all' or c['suite'] == args.suite]
+    if args.case_id:
+        wanted=set(args.case_id)
+        known={case['id'] for case in cases}
+        unknown=wanted-known
+        if unknown:
+            p.error('Unknown case IDs in selected suite: ' + ', '.join(sorted(unknown)))
+        cases=[case for case in cases if case['id'] in wanted]
     if args.limit is not None:
         if args.limit < 1:
             p.error('--limit must be positive')
