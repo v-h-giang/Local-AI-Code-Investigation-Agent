@@ -20,10 +20,12 @@ def main(argv=None):
     p.add_argument('--timeout', type=int, default=240, help='HTTP response timeout in seconds (default 240)')
     sub = p.add_subparsers(dest='command', required=True)
     kb = sub.add_parser('knowledge',help='Manage offline global programming knowledge base')
-    kb.add_argument('operation',choices=('build','query','status'))
+    kb.add_argument('operation',choices=('build','query','related','status'))
     kb.add_argument('question',nargs='?',default='')
     kb.add_argument('--kb-path',default=None,help='Optional SQLite knowledge DB location')
     kb.add_argument('--pack-dir',default=None,help='Local JSON pack directory for build')
+    tech = sub.add_parser('technologies',help='List source-derived repository language/module profiles')
+    tech.add_argument('--out',default='output/architecture')
     li = sub.add_parser('lsp-import',help='Import a pre-exported LSP JSON symbol-location array')
     li.add_argument('file',help='Local JSON file; this never launches a language server')
     li.add_argument('--out',default='output/architecture')
@@ -139,7 +141,7 @@ def main(argv=None):
     print_ram_status()
     try:
         if a.command=='knowledge':
-            from knowledge_base import build_knowledge, query_knowledge, knowledge_status
+            from knowledge_base import build_knowledge, query_knowledge, related_concepts, knowledge_status
             if a.operation=='build':
                 result=build_knowledge(db_path=a.kb_path,pack_dir=a.pack_dir)
             elif a.operation=='query':
@@ -147,8 +149,25 @@ def main(argv=None):
                     raise ValueError('knowledge query requires a question')
                 result={'question':a.question,'concepts':query_knowledge(
                     a.question,db_path=a.kb_path)}
+            elif a.operation=='related':
+                if not a.question.strip():
+                    raise ValueError('knowledge related requires a concept ID')
+                result={'concept_id':a.question,'neighbors':related_concepts(
+                    a.question,db_path=a.kb_path)}
             else:
                 result=knowledge_status(db_path=a.kb_path)
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+            return 0
+        if a.command=='technologies':
+            import sqlite3
+            from contextlib import closing
+            from repository_knowledge import technology_overview
+            db=(Path(a.out).expanduser().resolve()/'middle-files'/
+                'code_intelligence.sqlite')
+            if not db.is_file():
+                raise ValueError('Run intelligence before technologies')
+            with closing(sqlite3.connect(db)) as conn:
+                result=technology_overview(conn)
             print(json.dumps(result,ensure_ascii=False,indent=2))
             return 0
         if a.command in ('lsp-import','lsp-symbol'):
