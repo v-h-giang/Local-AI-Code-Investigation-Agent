@@ -82,6 +82,33 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertIn('python/samples/03-workflows/functional/parallel_pipeline.py',paths)
         self.assertTrue(all(item['citation'] is False for item in matches))
 
+    def test_v5_realistic_decision_and_ci_noise(self):
+        (self.root / 'python' / 'packages' / 'orchestrations').mkdir(parents=True)
+        (self.root / 'python' / 'samples' / '03-workflows' / 'functional').mkdir(parents=True)
+        (self.root / 'docs' / 'decisions').mkdir(parents=True)
+        (self.root / '.github' / 'workflows').mkdir(parents=True)
+        (self.root / 'python' / 'packages' / 'orchestrations' / '_concurrent.py').write_text(
+            'def concurrent_workflow():\n    return aggregate_results()\n',encoding='utf-8')
+        (self.root / 'python' / 'samples' / '03-workflows' / 'functional' /
+         'parallel_pipeline.py').write_text(
+            'def pipeline():\n    return parallel_tasks()\n',encoding='utf-8')
+        for i in range(12):
+            (self.root / 'docs' / 'decisions' / ('decision_%d.md' % i)).write_text(
+                ('you their response combine parallel\n' * 25),encoding='utf-8')
+            (self.root / '.github' / 'workflows' / ('ci_%d.yml' % i)).write_text(
+                'steps: combine parallel response\n',encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name) / 'output',verbose=False)
+        ranked=search_file_candidates(self.repo,
+            'How would you run several specialist agents in parallel on '
+            'the same request and then combine their answers into one response?',
+            limit=8)
+        top={item['path'] for item in ranked}
+        self.assertIn('python/packages/orchestrations/_concurrent.py',top)
+        self.assertIn('python/samples/03-workflows/functional/parallel_pipeline.py',top)
+        self.assertTrue(all(not p.startswith(('.github/','docs/decisions/')) for p in top))
+        self.assertTrue(all('you' not in c['content_terms'] and
+                            'their' not in c['content_terms'] for c in ranked))
+
     def test_v5_dotnet_checkpoint_keeps_implementation(self):
         (self.root / 'dotnet' / 'src').mkdir(parents=True)
         (self.root / 'python' / 'samples').mkdir(parents=True)
