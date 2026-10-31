@@ -21,6 +21,7 @@ from architecture import _scan, _module, load_architecture
 from language_registry import grammar_for
 from universal_symbols import lexical_symbols
 from repository_knowledge import ensure_module_schema, refresh_module_profiles
+from knowledge_base import expand_query_terms
 from codebase import Repo
 
 SCHEMA_VERSION = '49.3'
@@ -559,6 +560,9 @@ def search_file_candidates(repo, query, limit=6):
         preferred='python'
     # Rare, domain-specific tokens contribute much more than generic tokens.
     informative=[w for w in words if w not in _FILE_COMMON]
+    # Independent, versioned universal programming concepts enrich the
+    # navigation score only. Never turn KB suggestions into source citations.
+    knowledge_terms=expand_query_terms(query,max_terms=6)
     vocabulary=[]
     # FTS must not OR high-frequency conversational words into a query:
     # they swamp SQLite's bounded result set with unrelated documents.
@@ -601,6 +605,12 @@ def search_file_candidates(repo, query, limit=6):
                 score+= (13 if rare else 1) + (
                     11 if rare and any(v in basename for v in variants) else 0)
             content_terms=source_matches.get(path,set())
+            # Conservative KB path expansion, bounded so the original query
+            # and actual source terms remain dominant. No benchmark paths.
+            knowledge_path_matches=[term for term in knowledge_terms
+                                    if term in path_parts]
+            if knowledge_path_matches:
+                score+=min(9,3*len(knowledge_path_matches))
             # Prefer independent *technical concepts* over incidental prose
             # matches. FTS is a recall hint, not enough to outrank actual
             # implementation filenames.
@@ -656,7 +666,8 @@ def search_file_candidates(repo, query, limit=6):
                 ranked.append({'path':path,'path_score':score,'match_terms':matched,
                                'content_terms':sorted(content_terms),
                                'kind':'hybrid-file-candidate',
-                               'file_role':kind,'citation':False})
+                               'file_role':kind,'citation':False,
+                               'knowledge_path_terms':knowledge_path_matches})
     ranked.sort(key=lambda r:(-r['path_score'],-len(r['content_terms']),
                               len(r['path']),r['path']))
     limit=max(1,min(50,int(limit)))
