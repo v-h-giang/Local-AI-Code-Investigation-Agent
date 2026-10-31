@@ -57,6 +57,45 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertTrue(matches)
         self.assertTrue(matches[0]['path'].startswith('dotnet/'))
 
+    def test_v5_domain_filename_beats_generic_response_files(self):
+        (self.root / 'python' / 'packages' / 'orchestrations').mkdir(parents=True)
+        (self.root / 'python' / 'samples' / '03-workflows' / 'functional').mkdir(parents=True)
+        (self.root / 'python' / 'packages' / 'orchestrations' / '_concurrent.py').write_text(
+            'def run_concurrent():\n    return aggregate()\n',
+            encoding='utf-8')
+        (self.root / 'python' / 'samples' / '03-workflows' / 'functional' /
+         'parallel_pipeline.py').write_text(
+            'def concurrent_tasks():\n    return 1\n',encoding='utf-8')
+        distractors=self.root / 'python' / 'packages' / 'responses'
+        distractors.mkdir(parents=True)
+        for n in range(12):
+            (distractors / ('AgentResponse%d.py' % n)).write_text(
+                'class AgentResponse%d:\n    pass\n' % n,encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name) / 'output',verbose=False)
+        matches=search_file_candidates(
+            self.repo,
+            'How would you run several specialist agents in parallel on '
+            'the same request and then combine their answers into one response?',
+            limit=8)
+        paths={item['path'] for item in matches}
+        self.assertIn('python/packages/orchestrations/_concurrent.py',paths)
+        self.assertIn('python/samples/03-workflows/functional/parallel_pipeline.py',paths)
+        self.assertTrue(all(item['citation'] is False for item in matches))
+
+    def test_v5_dotnet_checkpoint_keeps_implementation(self):
+        (self.root / 'dotnet' / 'src').mkdir(parents=True)
+        (self.root / 'python' / 'samples').mkdir(parents=True)
+        (self.root / 'dotnet' / 'src' / 'CheckpointManager.cs').write_text(
+            'class CheckpointManager { }\n',encoding='utf-8')
+        (self.root / 'python' / 'samples' / 'checkpoint_resume.py').write_text(
+            'def resume():\n    return True\n',encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name) / 'output',verbose=False)
+        matches=search_file_candidates(
+            self.repo, 'For a .NET workflow with mutable executor state, '
+            'what is needed to resume from a saved point?',limit=8)
+        self.assertTrue(matches)
+        self.assertEqual(matches[0]['path'],'dotnet/src/CheckpointManager.cs')
+
     def test_scoped_source_search_does_not_invent_citations(self):
         (self.root / 'checkpoint_resume.py').write_text(
             'def checkpoint():\n    return 1\n'
