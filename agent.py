@@ -196,6 +196,9 @@ def main(argv=None):
             from architecture import export_architecture
             from module_summary import summarize_modules
             result = export_architecture(repo,a.out)
+            from source_context import prepare_source_context
+            source_context,prepared_index = prepare_source_context(repo,a.out)
+            result['source_context']=source_context
             from local_workflow import WorkflowState, atomic_json
             state=WorkflowState(a.out)
             state.record('architecture','completed',files=result.get('files_scanned'))
@@ -233,7 +236,8 @@ def main(argv=None):
             if not 0 <= a.investigation_review_rounds <= 2 or not 0 <= a.synthesis_review_rounds <= 2:
                 raise ValueError('Review rounds must be between 0 and 2')
             suggestions = suggest_investigations(repo,a.out,top=20,
-                llm=workflow_llm if rank_with_qwen else None,ai_rounds=a.question_review_rounds)
+                llm=workflow_llm if rank_with_qwen else None,
+                ai_rounds=a.question_review_rounds,prepared_index=prepared_index)
             candidates = suggestions.pop('candidates')
             result.update(suggestions)
             state.record('suggested_investigations','completed',count=result['suggestions_count'],
@@ -280,6 +284,10 @@ def main(argv=None):
             from code_intelligence import (build_intelligence, investigate, symbol_query, trace,
                 impact, clusters, business_flows, git_history, diff_impact, vectorize, vector_search)
             repo.intelligence_db=(Path(a.out).expanduser().resolve()/'middle-files'/'code_intelligence.sqlite')
+            source_context=None
+            if a.command=='investigate':
+                from source_context import prepare_source_context
+                source_context,_prepared_index=prepare_source_context(repo,a.out)
             if a.command=='intelligence': result=build_intelligence(repo,a.out)
             elif a.command=='history':result=git_history(repo,a.file,a.limit)
             elif a.command=='diff-impact':result=diff_impact(repo,a.base,a.head)
@@ -297,6 +305,8 @@ def main(argv=None):
                     Ollama(a.host,a.model,timeout=a.timeout,num_ctx=a.num_ctx),a.out,max_calls=a.max_llm_calls)
                 result=investigate(repo,a.question,llm,budget=a.budget,max_steps=a.max_steps,
                                    review_rounds=a.review_rounds)
+                if isinstance(result,dict):
+                    result['source_context']=source_context
                 from investigation_report import write_investigation
                 effective_status='insufficient-evidence' if result.get('answer_status')=='insufficient-evidence' else 'completed'
                 output=write_investigation(repo,a.out,result,question=a.question,status=effective_status,
