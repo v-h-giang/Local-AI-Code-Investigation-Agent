@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 
 from codebase import Repo
-from code_intelligence import build_intelligence, search_relevant_sources, search_file_candidates
-from investigation_loop import _validate_action, _tool_execute, investigate_iteratively
+from code_intelligence import build_intelligence, search_relevant_sources, search_file_candidates, search_file_locations
+from investigation_loop import _validate_action, _tool_execute, _compact_tool_result, investigate_iteratively
 
 
 class SourceRetrievalTests(unittest.TestCase):
@@ -56,6 +56,45 @@ class SourceRetrievalTests(unittest.TestCase):
             self.repo, 'How does a .NET workflow resume from a checkpoint?', limit=6)
         self.assertTrue(matches)
         self.assertTrue(matches[0]['path'].startswith('dotnet/'))
+
+    def test_scoped_source_search_does_not_invent_citations(self):
+        (self.root / 'checkpoint_resume.py').write_text(
+            'def checkpoint():\n    return 1\n'
+            'def resume():\n    return checkpoint()\n',encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name) / 'output',verbose=False)
+        hits=search_file_locations(self.repo,'checkpoint_resume.py',
+                                   'How to resume from checkpoint?',limit=8)
+        self.assertTrue(hits)
+        self.assertTrue(all(row['path']=='checkpoint_resume.py' for row in hits))
+        self.assertTrue(all(row['line']>0 for row in hits))
+        with self.assertRaises(ValueError):
+            search_file_locations(self.repo,'../secret.py','resume')
+
+    def test_source_window_uses_real_visible_line_refs(self):
+        lines=['%5d | line number %s' % (i,i) for i in range(1,70)]
+        lines[43]='   44 | def restore_session():'
+        raw={'path':'worker.py','content':'\n'.join(lines),
+             'source_refs':['worker.py:%d' % i for i in range(1,70)]}
+        compact=_compact_tool_result(raw,max_chars=1000,question='restore session')
+        self.assertIn('worker.py:44',compact['source_refs'])
+        self.assertNotIn('worker.py:1',compact['source_refs'])
+        self.assertLessEqual(len(compact['source_refs']),15)
+        self.assertIn('def restore_session()',compact['content'])
+
+    def test_file_candidate_prefill_stays_without_source_citations(self):
+        (self.root / 'concurrent.py').write_text('class Empty:\n    pass\n',encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name) / 'output',verbose=False)
+        class FinishModel:
+            def call(self,messages,tools=False,num_predict=None,**kwargs):
+                if num_predict==180:
+                    return {'content':'{"action":"finish"}'}
+                return {'content':'No code evidence.'}
+        result=investigate_iteratively(self.repo,'parallel concurrent',
+                         FinishModel(),{'intent':'locate','queries':['MissingToken777'],
+                                         'symbols':[]},max_steps=2,review_rounds=0)
+        self.assertTrue(result['file_discovery']['candidates'])
+        self.assertLessEqual(result['steps_used'],2)
+        self.assertFalse(result['source_citations'])
 
     def test_read_source_is_bounded_and_cites_actual_lines(self):
         action = _validate_action({'tool':'read_source','path':'worker.py',
