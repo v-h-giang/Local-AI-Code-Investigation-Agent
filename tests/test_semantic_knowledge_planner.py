@@ -99,7 +99,12 @@ class SemanticKnowledgePlannerTests(unittest.TestCase):
             plan=_plan_with_qwen(model,"Where is solver?",repo=self.repo)
             self.assertEqual(len(model.calls),1)
             self.assertTrue(plan["queries"])
-            self.assertFalse(plan["knowledge_prompt_used"])
+            # Global KB can be absent while repo-language metadata remains
+            # available as bounded, non-authoritative planning context.
+            user_prompt=model.calls[0]["messages"][1]["content"]
+            self.assertNotIn("General programming concepts",user_prompt)
+            self.assertIn("Detected repository languages",user_prompt)
+            self.assertTrue(plan["knowledge_prompt_used"])
 
     def test_qwen_plan_queries_add_secondary_file_candidates(self):
         from investigation_loop import investigate_iteratively
