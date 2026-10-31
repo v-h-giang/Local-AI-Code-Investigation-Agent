@@ -50,7 +50,9 @@ class ReviewToolModel(TinyLocalModel):
             self.calls.append(180)
             self.decisions+=1
             if self.decisions==1:return {'content':'{"action":"finish"}'}
-            return {'content':'{"action":"tool","tool":"search","query":"OrderService"}'}
+            # Review must request an unused action rather than replaying the
+            # initial OrderService search selected by deterministic fallback.
+            return {'content':'{"action":"tool","tool":"search","query":"saveOrder"}'}
         return super().call(messages,tools,num_predict,**kwargs)
 
 
