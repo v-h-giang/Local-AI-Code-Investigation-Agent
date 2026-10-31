@@ -33,12 +33,12 @@ class UniversalKnowledgeTests(unittest.TestCase):
     def test_pack_is_versioned_repeatable_and_offline(self):
         first=build_knowledge(db_path=self.kb)
         self.assertIn("core-programming",first["updated_packs"])
-        self.assertGreater(first["concepts"],20)
+        self.assertGreaterEqual(first["concepts"],126)
         second=build_knowledge(db_path=self.kb)
         self.assertEqual(second["updated_packs"],[])
         self.assertIn("core-programming",second["unchanged_packs"])
         status=knowledge_status(db_path=self.kb)
-        self.assertEqual(status["packs"],1)
+        self.assertEqual(status["packs"],6)
         hits=query_knowledge("How do I resume a workflow checkpoint?",
                              db_path=self.kb)
         self.assertIn("workflow.checkpoint",{h["concept_id"] for h in hits})
