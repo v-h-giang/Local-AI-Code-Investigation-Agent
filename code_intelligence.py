@@ -514,58 +514,113 @@ def _path_words(path):
 
 
 def search_file_candidates(repo, query, limit=6):
-    """Discover file paths by question vocabulary, independently of line FTS5.
+    """Hybrid file retrieval: filename, indexed source terms and module diversity.
 
-    Reads the already-built SQLite file inventory. A matching filename is only
-    a *lead*, not a validated source citation. No gold-label data is accessed.
+    No benchmark gold labels are used. File candidates do NOT grant citations.
+    The query runs bounded SQL on the existing incremental index.
     """
     if not isinstance(query, str) or not query.strip():
         return []
-    words = []
-    for word in re.findall(r'[A-Za-z0-9_]+', query):
-        lowered = word.lower()
-        if len(lowered) >= 3 and lowered not in _SEARCH_STOPWORDS and lowered not in words:
-            words.append(lowered)
-        if len(words) >= 16:
+    words=[]
+    for word in re.findall(r'[A-Za-z0-9_]+', query.lower()):
+        if len(word)>=3 and word not in _SEARCH_STOPWORDS and word not in words:
+            words.append(word)
+        if len(words)>=18:
             break
-    preferred = None
-    if re.search(r'(?i)\.net\b|\bc#\b|\bcsharp\b|\bdotnet\b', query):
-        preferred = 'dotnet'
-    elif re.search(r'(?i)\bpython\b', query):
-        preferred = 'python'
-    ranked = []
+    if not words:
+        return []
+    preferred=None
+    if re.search(r'(?i)\.net\b|\bc#\b|\bcsharp\b|\bdotnet\b',query):
+        preferred='dotnet'
+    elif re.search(r'(?i)\bpython\b',query):
+        preferred='python'
+    # Rare, domain-specific tokens contribute much more than generic tokens.
+    informative=[w for w in words if w not in _FILE_COMMON]
+    vocabulary=[]
+    for word in informative+words:
+        for token in (word,)+_FILE_SYNONYMS.get(word,()):
+            if token not in vocabulary and len(vocabulary)<32:
+                vocabulary.append(token)
+    source_matches={}
+    if vocabulary:
+        expression=' OR '.join('"'+word+'"' for word in vocabulary)
+        with closing(_connect(repo)) as conn:
+            # Text BM25 is used for candidate discovery, not as proof.
+            rows=conn.execute(
+                'SELECT path, text FROM search_fts WHERE search_fts MATCH ? '
+                'LIMIT 1200',(expression,)
+            ).fetchall()
+            for row in rows:
+                path=row['path']
+                hit=source_matches.setdefault(path,set())
+                text_tokens=set(re.findall(r'[a-z0-9_]+',row['text'].lower()))
+                for word in informative:
+                    if any(v in text_tokens for v in (word,)+_FILE_SYNONYMS.get(word,())):
+                        hit.add(word)
+        # Inventory includes filenames that never appear as source text.
+    ranked=[]
     with closing(_connect(repo)) as conn:
-        files = conn.execute('SELECT path FROM files')
-        for (path,) in files:
-            path_parts = _path_words(path)
-            basename = _path_words(Path(path).stem)
-            score = 0
-            matched = []
+        for (path,) in conn.execute('SELECT path FROM files'):
+            path_parts=_path_words(path)
+            basename=_path_words(Path(path).stem)
+            matched=[]
+            score=0
             for word in words:
-                variants = (word,) + _FILE_SYNONYMS.get(word, ())
+                variants=(word,)+_FILE_SYNONYMS.get(word,())
                 if not any(v in path_parts for v in variants):
                     continue
                 matched.append(word)
-                weight = 2 if word in _FILE_COMMON else 9
-                score += weight + (6 if any(v in basename for v in variants) else 0)
-            if not matched:
+                rare=word not in _FILE_COMMON
+                score+= (13 if rare else 1) + (
+                    11 if rare and any(v in basename for v in variants) else 0)
+            content_terms=source_matches.get(path,set())
+            if content_terms:
+                score+=min(25,6*len(content_terms))
+            if not matched and not content_terms:
                 continue
-            normalized = path.replace('\\', '/').lower()
+            normalized=path.lower().replace('\\','/')
             if preferred:
-                if normalized.startswith(preferred + '/'):
-                    score += 12
-                elif normalized.startswith(('dotnet/', 'python/')):
-                    score -= 25
-            # Tests are useful evidence, but show an implementation first.
+                if normalized.startswith(preferred+'/'):
+                    score+=16
+                elif normalized.startswith(('dotnet/','python/')):
+                    score-=20
             if '/tests/' in normalized or normalized.startswith('tests/'):
-                score -= 3
-            if score <= 0:
-                continue
-            ranked.append((score, len(matched), path, matched))
-    ranked.sort(key=lambda x: (-x[0], -x[1], len(x[2]), x[2]))
-    return [{'path': path, 'match_terms': matched, 'path_score': score,
-             'kind': 'file-path-candidate', 'citation': False}
-            for score, _, path, matched in ranked[:max(1, min(15, int(limit)))]]
+                score-=5
+            if '/src/' in normalized or '/packages/' in normalized:
+                score+=4
+            # Avoid over-ranking an unrelated response/request model.
+            if not any(w not in _FILE_COMMON for w in matched) and not content_terms:
+                score-=5
+            if score>0:
+                kind=('implementation' if '/src/' in normalized or '/packages/' in normalized
+                      else 'test' if '/tests/' in normalized
+                      else 'sample' if '/samples/' in normalized
+                      else 'documentation' if normalized.endswith('.md')
+                      else 'other')
+                ranked.append({'path':path,'path_score':score,'match_terms':matched,
+                               'content_terms':sorted(content_terms),
+                               'kind':'hybrid-file-candidate',
+                               'file_role':kind,'citation':False})
+    ranked.sort(key=lambda r:(-r['path_score'],-len(r['content_terms']),
+                              len(r['path']),r['path']))
+    limit=max(1,min(50,int(limit)))
+    # First pass: diversify modules/roles; second pass: fill by global rank.
+    result=[];chosen=set();by_bucket={}
+    for row in ranked:
+        parts=row['path'].split('/')
+        bucket=('/'.join(parts[:3]) if len(parts)>=3 else parts[0],
+                row['file_role'])
+        if by_bucket.get(bucket,0)>=2:
+            continue
+        result.append(row);chosen.add(row['path'])
+        by_bucket[bucket]=by_bucket.get(bucket,0)+1
+        if len(result)>=limit:break
+    if len(result)<limit:
+        for row in ranked:
+            if row['path'] in chosen:continue
+            result.append(row)
+            if len(result)>=limit:break
+    return result
 
 
 def _neighbors(conn,frontier,direction):
