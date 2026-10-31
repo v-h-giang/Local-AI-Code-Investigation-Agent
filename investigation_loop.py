@@ -110,12 +110,62 @@ def _tool_execute(repo, action):
     raise ValueError('Tool denied')
 
 
-def _compact_tool_result(value, max_chars=1800):
-    """Keep evidence small; return JSON safely serializable, no false source citations."""
+def _source_observation_window(value, question, max_chars):
+    """Show a contiguous, relevant subset of actual numbered source lines.
+
+    Only the displayed lines become citations; opening a 100-line region does
+    not silently grant 100 source references to Qwen.
+    """
+    numbered=[]
+    for raw in value.get('content','').splitlines():
+        match=re.match(r'^\s*(\d+) \| ',raw)
+        if match:
+            numbered.append((int(match.group(1)),raw))
+    if not numbered:
+        return {'path':value['path'],'content':'','source_refs':[]}
+    terms=set(re.findall(r'[a-z0-9_]{4,}',question.lower()))
+    terms -= {'what','when','where','which','with','from','that','this','does',
+              'have','into','about','using','would','should','could','your'}
+    anchor=max(range(len(numbered)),key=lambda i: (
+        sum(3 for t in terms if t in numbered[i][1].lower()) +
+        (2 if re.search(r'\b(?:def|class|function|return|public|private)\b',
+                        numbered[i][1]) else 0),-i))
+    # Keep a nearby context window; preserve exact line numbers in the excerpt.
+    best=None
+    for width in (15,12,9,6,3,1):
+        begin=max(0,min(anchor-width//2,len(numbered)-width))
+        selected=numbered[begin:begin+width]
+        if not selected:continue
+        result={'path':value['path'],'start_line':selected[0][0],
+                'end_line':selected[-1][0],
+                'content':'\n'.join(raw for _,raw in selected),
+                'source_refs':[f'{value["path"]}:{line}' for line,_ in selected],
+                'windowed':len(selected)<len(numbered)}
+        best=result
+        if len(json.dumps(result,ensure_ascii=False))<=max_chars:
+            return result
+    # Even a very long source line is bounded to the observation budget.
+    if best is None:return {'path':value['path'],'content':'','source_refs':[]}
+    best['content']=best['content'][:max(0,max_chars-240)]
+    return best
+
+
+def _compact_tool_result(value, max_chars=1800, question=''):
+    """Preserve complete structured evidence rather than half of a JSON row."""
+    if isinstance(value,dict) and 'content' in value and 'source_refs' in value:
+        return _source_observation_window(value,question,max_chars)
+    if isinstance(value,list):
+        selected=[]
+        for entry in value:
+            attempt=selected+[entry]
+            if len(json.dumps(attempt,ensure_ascii=False,default=str))>max_chars:
+                break
+            selected=attempt
+        return selected
     raw=json.dumps(value,ensure_ascii=False,default=str)
     if len(raw)<=max_chars:return value
-    # Truncation is explicitly marked, never silently masquerades as full evidence.
-    return {'truncated':True,'preview':raw[:max_chars], 'original_chars':len(raw)}
+    return {'truncated':True,'preview':raw[:max(0,max_chars-100)],
+            'original_chars':len(raw)}
 
 
 def _evidence_lines(result):
@@ -212,13 +262,13 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         used.add(key)
         try:
             observation=_tool_execute(repo,selection)
-            source_refs=_evidence_lines(observation)
-            if selection['tool']=='read_source':source_refs=source_refs[:12]
-            compact=_compact_tool_result(observation,max_chars=min(1800,max(500,max_chars//max_steps)))
+            compact=_compact_tool_result(
+                observation,max_chars=min(1800,max(500,max_chars//max_steps)),
+                question=question)
+            source_refs=_evidence_lines(compact)
             item={'step':step+1,'tool':selection['tool'],'query':selection['query'],
                   'reason':reason,'observation':compact,'source_refs':source_refs,
                   'confidence':'static-or-heuristic; not runtime-verified'}
-            citations.extend(source_refs)
         except (ValueError,TypeError,RuntimeError,KeyError,OSError) as exc:
             item={'step':step+1,'tool':selection['tool'],'query':selection['query'],
                   'error':str(exc)[:180]}
@@ -232,6 +282,7 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
             raw=json.dumps(item,ensure_ascii=False)
         if spent+len(raw)>max_chars:break
         history.append(item);spent+=len(raw)
+        citations.extend(item.get('source_refs',[]))
     # Optional Qwen critic pass, bounded by the same tool-step budget.
     # Review is performed BEFORE answer synthesis to avoid unsupported prose
     # being fed back as if it were verified evidence.
@@ -272,11 +323,11 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         used.add(key)
         try:
             observation=_tool_execute(repo,selection)
-            refs=_evidence_lines(observation)
-            if selection['tool']=='read_source':refs=refs[:12]
+            compact=_compact_tool_result(observation,
+                       max_chars=min(1500,max(450,max_chars//max_steps)),question=question)
+            refs=_evidence_lines(compact)
             item={'step':len(history)+1,'tool':selection['tool'],'query':selection['query'],
-                  'reason':'review-gap-check', 'observation':_compact_tool_result(observation,
-                         max_chars=min(1500,max(450,max_chars//max_steps))),
+                  'reason':'review-gap-check', 'observation':compact,
                   'source_refs':refs,'confidence':'static-or-heuristic; not runtime-verified'}
             serialized=json.dumps(item,ensure_ascii=False)
             if spent+len(serialized)>max_chars:break
