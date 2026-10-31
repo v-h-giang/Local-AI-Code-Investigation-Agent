@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "pack_id": "legacy-enterprise",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "concepts": [
+    {
+      "id": "legacy.javaee",
+      "domain": "legacy",
+      "label": "Jakarta EE application",
+      "description": "Jakarta EE defines enterprise APIs for transactions, dependency injection and web components.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Jakarta EE application",
+        "java ee",
+        "jakarta ee",
+        "javax ee"
+      ]
+    },
+    {
+      "id": "legacy.ejb",
+      "domain": "legacy",
+      "label": "Enterprise JavaBeans",
+      "description": "EJB components provide managed services such as transactions and security in enterprise containers.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Enterprise JavaBeans",
+        "ejb",
+        "stateless session bean",
+        "@Stateless"
+      ]
+    },
+    {
+      "id": "legacy.mybatis",
+      "domain": "legacy",
+      "label": "MyBatis SQL mapping",
+      "description": "MyBatis maps SQL statements and result sets using XML or annotations.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "MyBatis SQL mapping",
+        "mybatis",
+        "mapper xml",
+        "sql mapper"
+      ]
+    },
+    {
+      "id": "legacy.jsp",
+      "domain": "legacy",
+      "label": "JavaServer Pages",
+      "description": "JSP templates generate server-side dynamic content in servlet environments.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "JavaServer Pages",
+        "jsp",
+        "taglib",
+        "jstl"
+      ]
+    },
+    {
+      "id": "legacy.flex",
+      "domain": "legacy",
+      "label": "Adobe Flex",
+      "description": "Flex applications use MXML and ActionScript for client-side UI and event-driven logic.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Adobe Flex",
+        "flex mxml",
+        "actionscript",
+        "remoteobject"
+      ]
+    },
+    {
+      "id": "legacy.cobol",
+      "domain": "legacy",
+      "label": "COBOL copybook",
+      "description": "COBOL copybooks share data declarations or reusable source snippets through COPY statements.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "COBOL copybook",
+        "cobol",
+        "copybook",
+        "copy statement"
+      ]
+    },
+    {
+      "id": "legacy.batch",
+      "domain": "legacy",
+      "label": "Batch processing",
+      "description": "Batch jobs process queued records or scheduled workloads with restart and checkpoint concerns.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Batch processing",
+        "batch job",
+        "scheduler",
+        "job restart"
+      ]
+    },
+    {
+      "id": "legacy.wcf",
+      "domain": "legacy",
+      "label": "Windows Communication Foundation",
+      "description": "WCF provides .NET service contracts, bindings and endpoints.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Windows Communication Foundation",
+        "wcf",
+        "servicecontract",
+        "binding configuration"
+      ]
+    },
+    {
+      "id": "legacy.com",
+      "domain": "legacy",
+      "label": "Component Object Model",
+      "description": "COM exposes binary interfaces and lifetime management across Windows components.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Component Object Model",
+        "com interface",
+        "iunknown",
+        "idispatch"
+      ]
+    },
+    {
+      "id": "legacy.oracle",
+      "domain": "legacy",
+      "label": "Oracle PL/SQL",
+      "description": "PL/SQL supports stored program units and procedural logic executed within Oracle Database.",
+      "source": "https://jakarta.ee/specifications/",
+      "aliases": [
+        "Oracle PL/SQL",
+        "plsql",
+        "package body",
+        "stored procedure"
+      ]
+    }
+  ],
+  "relations": []
+}
