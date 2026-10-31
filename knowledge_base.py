@@ -172,6 +172,25 @@ def query_knowledge(question, *, db_path=None, limit=8):
                     "score":quality,"citation":False}
     return sorted(hits.values(),key=lambda x:(-x["score"],x["concept_id"]))[:max(1,min(30,int(limit)))]
 
+
+def related_concepts(concept_id, *, db_path=None, limit=12):
+    """Typed navigation links. Relations are conceptual, not repo call edges."""
+    if not isinstance(concept_id,str) or not ID_RE.fullmatch(concept_id):
+        return []
+    path=_bootstrap(db_path)
+    with closing(sqlite3.connect(path)) as conn:
+        rows=conn.execute("""
+            SELECT r.kind,c.concept_id,c.domain,c.label,c.provenance
+            FROM concept_relations r JOIN concepts c
+              ON c.concept_id=CASE WHEN r.source_id=? THEN r.target_id ELSE r.source_id END
+            WHERE r.source_id=? OR r.target_id=?
+            ORDER BY r.kind,c.concept_id LIMIT ?""",
+            (concept_id,concept_id,concept_id,max(1,min(100,int(limit))))).fetchall()
+    return [{"relation":kind,"concept_id":cid,"domain":domain,"label":label,
+             "provenance":provenance,"citation":False}
+            for kind,cid,domain,label,provenance in rows]
+
+
 def expand_query_terms(question, *, db_path=None, max_terms=6):
     """Bounded KB aliases to enrich lexical retrieval; no network or Qwen."""
     try:
