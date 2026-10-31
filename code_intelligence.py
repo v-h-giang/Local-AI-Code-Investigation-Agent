@@ -643,13 +643,12 @@ def search_file_candidates(repo, query, limit=6):
     ranked.sort(key=lambda r:(-r['path_score'],-len(r['content_terms']),
                               len(r['path']),r['path']))
     limit=max(1,min(50,int(limit)))
-    # Maintain module diversity without collapsing unrelated packages or
-    # examples. One .NET project forms a module; independent sample examples
-    # are separate even when they share 03-workflows as a parent directory.
+    # Different source folders within one .NET project may own different
+    # workflow responsibilities (state, persistence, checkpoint manager).
+    # Restricting the entire project to two files hid relevant siblings.
+    # Independent sample examples also remain separate navigation buckets.
     def module_bucket(path, role):
         parts=path.split('/')
-        if len(parts)>=3 and parts[0]=='dotnet' and parts[1]=='src':
-            return ('/'.join(parts[:3]),role)
         if len(parts)>=4 and parts[0]=='python' and parts[1]=='samples':
             return ('/'.join(parts[:4]),role)
         folder=path.rsplit('/',1)[0] if '/' in path else '.'
