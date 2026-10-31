@@ -463,7 +463,14 @@ def search_file_locations(repo, path, query, limit=8):
             break
     if not terms:
         return []
-    expression = ' OR '.join('"' + term + '"' for term in terms)
+    # Match source vocabulary as well as question vocabulary. File discovery
+    # itself never supplies a file:line reference.
+    expanded=list(terms)
+    for term in terms:
+        for synonym in _FILE_SYNONYMS.get(term.lower(),()):
+            if synonym not in expanded and len(expanded)<20:
+                expanded.append(synonym)
+    expression = ' OR '.join('"' + term + '"' for term in expanded)
     with closing(_connect(repo)) as conn:
         rows = conn.execute(
             'SELECT path,line,snippet(search_fts,2,"[","]"," … ",18) AS excerpt,'
