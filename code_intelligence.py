@@ -484,10 +484,10 @@ def search_file_locations(repo, path, query, limit=8):
 # File discovery is separate from line citations: filenames are navigational
 # candidates, not proof that a statement appears at a particular source line.
 _FILE_SYNONYMS = {
-    'parallel': ('concurrent', 'concurrency', 'fanout'),
+    'parallel': ('concurrent', 'concurrency', 'fanout', 'pipeline'),
     'concurrent': ('parallel', 'concurrency'),
-    'combine': ('aggregate', 'aggregation', 'merge', 'fanin'),
-    'combining': ('aggregate', 'aggregation', 'merge', 'fanin'),
+    'combine': ('aggregate', 'aggregation', 'aggregator', 'fanin'),
+    'combining': ('aggregate', 'aggregation', 'aggregator', 'fanin'),
     'aggregated': ('aggregate', 'aggregation', 'merge', 'fanin'),
     'resume': ('checkpoint', 'checkpointing', 'resumable'),
     'resuming': ('checkpoint', 'checkpointing', 'resumable'),
@@ -503,6 +503,9 @@ _FILE_COMMON = _SEARCH_STOPWORDS | {
     'agent', 'agents', 'workflow', 'workflows', 'multiple', 'system',
     'request', 'app', 'application', 'example', 'samples', 'sample',
     'python', 'dotnet', 'net', 'after', 'before', 'across', 'regular',
+    'response', 'responses', 'answer', 'answers', 'combine', 'combining',
+    'their', 'you', 'your', 'would', 'several', 'same', 'then', 'what',
+    'needed', 'point', 'how', 'only', 'code', 'files',
 }
 
 
@@ -574,8 +577,11 @@ def search_file_candidates(repo, query, limit=6):
                 score+= (13 if rare else 1) + (
                     11 if rare and any(v in basename for v in variants) else 0)
             content_terms=source_matches.get(path,set())
+            # Prefer independent *technical concepts* over incidental prose
+            # matches. FTS is a recall hint, not enough to outrank actual
+            # implementation filenames.
             if content_terms:
-                score+=min(25,6*len(content_terms))
+                score+=min(16,4*len(content_terms))
             if not matched and not content_terms:
                 continue
             normalized=path.lower().replace('\\','/')
@@ -584,10 +590,28 @@ def search_file_candidates(repo, query, limit=6):
                     score+=16
                 elif normalized.startswith(('dotnet/','python/')):
                     score-=20
+            # CI/workflow automation and design decisions are especially
+            # common false positives for questions about runtime workflows.
+            if normalized.startswith('.github/'):
+                score-=40
+            if normalized.startswith('docs/decisions/'):
+                score-=30
             if '/tests/' in normalized or normalized.startswith('tests/'):
-                score-=5
+                score-=4
+            if '/samples/' in normalized and normalized.endswith(('.py','.cs')):
+                score+=6
+            if normalized.endswith(('.md','.yml','.yaml')):
+                score-=8
             if '/src/' in normalized or '/packages/' in normalized:
-                score+=4
+                score+=6
+            # Semantic directory signals: concurrent/parallel work is likely
+            # an orchestration component, not a response DTO.
+            if any(t in informative for t in ('parallel','concurrent','combine','combining')):
+                if any(t in path_parts for t in ('orchestrations','orchestration','functional','pipeline')):
+                    score+=8
+            if any(t in informative for t in ('resume','resuming','saved','persist')):
+                if any(t in path_parts for t in ('checkpoint','checkpointing','checkpoints')):
+                    score+=8
             # Avoid over-ranking an unrelated response/request model.
             if not any(w not in _FILE_COMMON for w in matched) and not content_terms:
                 score-=5
