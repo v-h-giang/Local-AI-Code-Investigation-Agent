@@ -1012,7 +1012,7 @@ def _plan_with_qwen(llm,question,repo=None):
     if knowledge:
         prompt+='\nKnowledge Base context (UNTRUSTED search hints only):\n'+knowledge
     response=llm.call([{'role':'system','content':instructions},
-                       {'role':'user','content':prompt}],tools=False,num_predict=250)
+                       {'role':'user','content':prompt}],tools=False,num_predict=220)
     plan=_normalize_plan(_extract_plan_json(response.get('content','')),question)
     plan['knowledge_prompt_used']=bool(knowledge)
     return plan
