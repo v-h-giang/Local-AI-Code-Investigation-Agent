@@ -79,6 +79,26 @@ If PowerShell blocks local scripts, use `powershell -ExecutionPolicy Bypass -Fil
 
 Optional flags: `-PullModel` (download `qwen3:8b`, requires installed/running Ollama), `-WithTreeSitter` (optional language parser), and `-RunTests`.
 
+### Hardware-aware Ollama environment (Windows)
+
+`setup.ps1` now detects available GPU vendor (Intel, NVIDIA or AMD) and system RAM with Windows CIM, and configures UTF-8 plus conservative Ollama environment settings. This does **not** install graphics drivers or guarantee a supported GPU backend. It does not restart Ollama automatically.
+
+```powershell
+.\setup.ps1                        # Auto: prefer supported GPU; fallback to native Ollama detection
+.\setup.ps1 -OllamaMode GPU         # Request GPU settings for detected hardware
+.\setup.ps1 -OllamaMode CPU         # Disable GPU backends (diagnostic / comparison)
+.\setup.ps1 -OllamaMode Skip        # Set UTF-8 only; leave Ollama settings untouched
+.\setup.ps1 -ProcessOnly           # Current PowerShell process only; no persistent User changes
+.\setup.ps1 -RunTests -OllamaMode Auto
+```
+
+Default mode `Auto` prefers CUDA on NVIDIA, enables Vulkan + `OLLAMA_IGPU_ENABLE=1` on Intel integrated graphics, and preserves Ollama's native backend discovery for AMD/unknown devices. `CPU` sets `CUDA_VISIBLE_DEVICES=-1`, `ROCR_VISIBLE_DEVICES=-1`, `GGML_VK_VISIBLE_DEVICES=-1`, `OLLAMA_VULKAN=0` and `OLLAMA_IGPU_ENABLE=0`; switching back to Auto/GPU **clears** those device masks. Python Unicode defaults: `PYTHONUTF8=1`, `PYTHONIOENCODING=utf-8`. Memory-friendly Ollama defaults: one parallel request, one loaded model, and default context 2048 for machines with <=24 GiB RAM; explicit pre-existing user context overrides are retained. `agent.py` separately supplies `--num-ctx 2048` by default; increase it explicitly only if resources allow.
+
+**Important:** the Ollama desktop application reads environment variables at startup. After changing setup modes, quit Ollama completely from the system tray, restart it, run `ollama run qwen3:8b "hello"`, and verify placement with `ollama ps`. A `100% GPU` placement indicator does not imply a particular inference speed; compare tokens/second. CPU/GPU variables do not retroactively affect an already-running Ollama service. GPU detection is heuristic and on Intel Iris Xe uses shared system memory.
+
+Official docs: [Ollama environment variables on Windows](https://docs.ollama.com/faq#setting-environment-variables-on-windows) · [Ollama GPU support](https://docs.ollama.com/gpu).
+
+
 Run without activating:
 
 ```powershell
