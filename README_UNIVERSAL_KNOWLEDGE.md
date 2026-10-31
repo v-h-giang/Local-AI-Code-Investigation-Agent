@@ -26,7 +26,7 @@ The final answer must still be grounded in **actual repository source lines**. G
 
 ## 2. Kiến trúc
 
-\`\`\`text
+```text
 Question
   ├─ technology detection / extension registry
   ├─ Global KB ~/.local_code_agent/knowledge/global_code_knowledge.sqlite
@@ -39,7 +39,7 @@ Question
         bounded concept hints + FTS5/BM25 + path ranking
               ↓
         read_source, verify line, answer with citations
-\`\`\`
+```
 
 All indexing and pack loading are offline and read-only **with respect to the user's project files**. SQLite index/output files are deliberately written outside the project source tree when the user selects an external output directory. No source code from the inspected repository is executed.
 
@@ -47,34 +47,34 @@ All indexing and pack loading are offline and read-only **with respect to the us
 
 In Windows PowerShell:
 
-\`\`\`powershell
+```powershell
 git pull origin main
 .\setup.ps1
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m unittest discover -s benchmark/tests -v
-\`\`\`
+```
 
-\`setup.ps1\` still uses \`-OllamaMode Auto\` by default. The curated KB uses Python standard library; no new mandatory dependency or additional Ollama inference is required.
+`setup.ps1` still uses `-OllamaMode Auto` by default. The curated KB uses Python standard library; no new mandatory dependency or additional Ollama inference is required.
 
-\`\`\`powershell
+```powershell
 .\.venv\Scripts\python.exe agent.py --project . knowledge status
 .\.venv\Scripts\python.exe agent.py --project . knowledge build
 .\.venv\Scripts\python.exe agent.py --project . knowledge query "How do we resume a workflow?"
-\`\`\`
+```
 
-To use a different global SQLite file, pass \`--kb-path "D:\knowledge\global.sqlite"\` or set the environment variable \`LOCAL_CODE_AGENT_KB_PATH\`.
+To use a different global SQLite file, pass `--kb-path "D:\knowledge\global.sqlite"` or set the environment variable `LOCAL_CODE_AGENT_KB_PATH`.
 
 ## 4. Kiểm tra nguồn đa ngôn ngữ
 
-\`\`\`powershell
+```powershell
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" intelligence --out "D:\SourceAnalysis"
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" symbol advance --out "D:\SourceAnalysis"
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" investigate "Where is the Fortran solver initialized?" --non-ai --out "D:\SourceAnalysis"
-\`\`\`
+```
 
-\`language_registry.py\` identifies common programming and configuration file types, including Fortran, C/C++, Go, Rust, Python, Java, C#, JavaScript/TypeScript, Kotlin, Swift, SQL, YAML, XML, and many others. A file that is indexed as text is **not** necessarily fully understood by the AST parser.
+`language_registry.py` identifies common programming and configuration file types, including Fortran, C/C++, Go, Rust, Python, Java, C#, JavaScript/TypeScript, Kotlin, Swift, SQL, YAML, XML, and many others. A file that is indexed as text is **not** necessarily fully understood by the AST parser.
 
-\`universal_symbols.py\` provides deliberately conservative declarations for selected languages, including Fortran modules and subroutines. Optional Tree-sitter support is best-effort; language pack availability varies.
+`universal_symbols.py` provides deliberately conservative declarations for selected languages, including Fortran modules and subroutines. Optional Tree-sitter support is best-effort; language pack availability varies.
 
 ## 5. Knowledge packs
 
@@ -82,7 +82,7 @@ Default seed: [knowledge/packs/core-programming.json](knowledge/packs/core-progr
 
 Example schema (illustration, not an additional pack):
 
-\`\`\`json
+```json
 {
   "schema_version": 1,
   "pack_id": "example-code-pack",
@@ -100,21 +100,21 @@ Example schema (illustration, not an additional pack):
   ],
   "relations": []
 }
-\`\`\`
+```
 
 Save local pack files as UTF-8 JSON in a directory and import explicitly:
 
-\`\`\`powershell
+```powershell
 .\.venv\Scripts\python.exe agent.py --project . knowledge build --pack-dir "D:\KnowledgePacks"
-\`\`\`
+```
 
-Packs are validated, hashed, and replaced transactionally by \`pack_id\` when contents change. **No source URL is fetched automatically**. Invalid relations or fields fail with an error. Importing only one folder does not delete other existing packs from the DB.
+Packs are validated, hashed, and replaced transactionally by `pack_id` when contents change. **No source URL is fetched automatically**. Invalid relations or fields fail with an error. Importing only one folder does not delete other existing packs from the DB.
 
-A concept's \`source\` field records provenance; it does not prove that a repository implements the concept.
+A concept's `source` field records provenance; it does not prove that a repository implements the concept.
 
 ## 6. Module knowledge
 
-The per-project index includes \`module_profiles\`, computed from actual indexed paths and symbols. This is descriptive metadata, not a generated architectural claim. For instance, the tool can show how many Fortran files or methods are present without assuming any actual runtime flow.
+The per-project index includes `module_profiles`, computed from actual indexed paths and symbols. This is descriptive metadata, not a generated architectural claim. For instance, the tool can show how many Fortran files or methods are present without assuming any actual runtime flow.
 
 The source database remains compatible with existing command-line investigation modes; global KB signals add only a small bounded path ranking boost and cannot create source citations.
 
@@ -124,7 +124,7 @@ V5.7 implements a **pre-exported JSON bridge**; it does not run or install langu
 
 Input format:
 
-\`\`\`json
+```json
 [
   {
     "symbol": "advance",
@@ -132,14 +132,14 @@ Input format:
     "range": { "start": { "line": 14, "character": 0 } }
   }
 ]
-\`\`\`
+```
 
 LSP line numbers are zero-based; the repository index uses one-based line numbers. Only existing files inside the configured project are accepted. External URLs, nonexistent files and out-of-range locations are rejected.
 
-\`\`\`powershell
+```powershell
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" lsp-import "D:\Export\locations.json" --out "D:\SourceAnalysis"
 .\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" lsp-symbol advance --out "D:\SourceAnalysis"
-\`\`\`
+```
 
 The bridge never launches an LSP server or executes inspected code; it is an opt-in adapter for information obtained separately. A future LSP client would need explicit trust boundaries and versioned server capabilities.
 
@@ -149,9 +149,9 @@ First run the test suites shown above. The existing 20 RepoContextBench cases an
 
 For offline candidate diagnostics using an existing prepared index:
 
-\`\`\`powershell
+```powershell
 .\.venv\Scripts\python.exe benchmark\inspect_candidates.py --from-run retrieval_v51_gpu_smoke --suite repocontextbench --limit 20 --summary-only
-\`\`\`
+```
 
 Compare micro/macro recall at 8/20 against the previous run before benchmarking Qwen. This code change **has not yet been validated on the user's Windows environment**; do not assume accuracy or performance improvements until measured.
 
@@ -161,6 +161,6 @@ Compare micro/macro recall at 8/20 against the previous run before benchmarking 
 - Domain pack seed is small. Extend from versioned official references and curate ambiguous aliases.
 - No live language server client is bundled. LSP export import is the supported V5.7 subset.
 - Local pack updates require an explicit command; automated Internet retrieval, signature verification, and upstream diff review are future work.
-- Existing optional \`vectorize\`/\`semantic\` Ollama modes remain separate. No always-on embeddings are required.
+- Existing optional `vectorize`/`semantic` Ollama modes remain separate. No always-on embeddings are required.
 - Graph edges from lexical mentions remain candidates unless explicitly verified.
 - Cross-domain benchmark testing, including unseen repositories, is essential to avoid overfitting.
