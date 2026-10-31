@@ -14,9 +14,9 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from codebase import EXCLUDE_DIRS, MAX_BYTES, Repo
+from language_registry import SOURCE_EXTENSIONS, is_source_file
 
-CODE_EXTS = {'.java','.as','.mxml','.sql','.xml','.jsp','.jspx','.xhtml','.fxml','.hbm',
-             '.properties','.yaml','.yml','.toml','.py','.pyi','.cs','.csx','.md'}
+CODE_EXTS = SOURCE_EXTENSIONS
 CONFIG_NAMES = {'pom.xml','build.gradle','build.gradle.kts','settings.gradle','settings.gradle.kts',
                 'gradle.properties','libs.versions.toml','ivy.xml','build.xml','application.xml',
                 'air-app.xml','settings.xml','MANIFEST.MF'}
@@ -40,7 +40,7 @@ def _scan(root: Path):
         dirs[:] = sorted(d for d in dirs if d not in EXCLUDE_DIRS and not (Path(base)/d).is_symlink())
         for name in sorted(names):
             path = Path(base)/name
-            if path.is_symlink() or (path.suffix.lower() not in CODE_EXTS and name not in CONFIG_NAMES):
+            if path.is_symlink() or (not is_source_file(path) and name not in CONFIG_NAMES):
                 continue
             try:
                 if path.stat().st_size > MAX_BYTES:
