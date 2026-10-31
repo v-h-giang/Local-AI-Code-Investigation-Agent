@@ -107,14 +107,19 @@ def _qwen_rank_candidates(llm, pool, rounds=2):
     return journal
 
 
-def suggest_investigations(repo, out='output/architecture', top=20, *, llm=None, ai_rounds=2):
+def suggest_investigations(repo, out='output/architecture', top=20, *, llm=None, ai_rounds=2, prepared_index=None):
     """Rank at most `top` distinct source-backed questions across two groups."""
     if not 1 <= top <= 100:
         raise ValueError('top must be between 1 and 100')
     dest = Path(out).expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
-    print('[Suggestions] Building/reusing source intelligence index...',flush=True)
-    index = build_intelligence(repo, dest, verbose=True)
+    if prepared_index is None:
+        print('[Suggestions] Building/reusing source intelligence index...',flush=True)
+        index = build_intelligence(repo, dest, verbose=True)
+    else:
+        # Reuse the index already prepared by the main architecture command.
+        # Standalone callers retain the previous automatic indexing behavior.
+        index = prepared_index
     print('[Suggestions] Collecting source-backed investigation candidates...',flush=True)
     candidates = []
     seen = set()
