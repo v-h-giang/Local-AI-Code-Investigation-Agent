@@ -251,14 +251,22 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         pass
     candidates=file_discovery.get('candidates') or []
     actions=_tools_for_plan(dict(plan,question=question))
-    # Prefer a real line search inside a confidently matched filename.
-    if candidates and candidates[0].get('path_score',0)>=14:
-        actions.insert(0, {'tool':'search_file','path':candidates[0]['path'],
+    # Search in the best likely implementation, not blindly in the highest
+    # ranked document or CI file. Discovery remains navigational only.
+    source_candidate=next((c for c in candidates
+                           if c.get('file_role') in ('implementation','sample')
+                           and c.get('path','').endswith(('.py','.cs','.java','.fs','.go','.rs'))
+                           and c.get('path_score',0)>=14),None)
+    if source_candidate is not None:
+        actions.insert(0, {'tool':'search_file','path':source_candidate['path'],
                            'query':question[:700]})
     def action_key(action):
         return (action['tool'],action.get('query',''),action.get('direction','out'),
                 action.get('path',''),action.get('start_line',0),action.get('end_line',0))
     history=[];used=set();citations=[];errors=[];spent=0
+    # One file-scoped search per file: different queries into the same file
+    # should not occupy repeated scarce LLM actions.
+    inspected_paths=set()
     # Reserve answer context from the shared evidence budget; each tool capped.
     max_chars=max(600,min(12000,int(budget)*3))
     for step in range(max_steps):
@@ -279,12 +287,19 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         # Initial action and malformed/invalid/repeated suggestions: deterministic fallback.
         if step == 0:
             selection=_validate_action(actions[0]) if actions else None
+        if (selection is not None and selection['tool']=='search_file'
+                and selection.get('path') in inspected_paths):
+            selection=None
         if selection is None or action_key(selection) in used:
             selection=next((x for proposed in actions if (x:=_validate_action(proposed))
-                            and action_key(x) not in used),None)
+                            and action_key(x) not in used
+                            and not (x['tool']=='search_file'
+                                     and x.get('path') in inspected_paths)),None)
         if selection is None:break
         key=action_key(selection)
         used.add(key)
+        if selection['tool']=='search_file':
+            inspected_paths.add(selection['path'])
         try:
             observation=_tool_execute(repo,selection)
             compact=_compact_tool_result(
