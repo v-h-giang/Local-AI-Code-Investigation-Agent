@@ -54,6 +54,30 @@ class BenchmarkTests(unittest.TestCase):
             self.assertEqual(score['gold_files'], 1)
             self.assertEqual(score['gold_file_hits'], 1)
 
+    def test_candidate_observed_and_reported_recall_are_separate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root / 'a.py').write_text(
+                'first line\nimportant gold line\nlast line\n',encoding='utf-8')
+            (root / 'b.py').write_text(
+                'other code\n',encoding='utf-8')
+            case={'gold_spans':[{'path':'a.py','start_line':2,'end_line':2}]}
+            record={
+                'evidence':[{'path':'b.py','line':1,'provenance':'investigation'}],
+                'investigation':{
+                    'file_discovery':{'candidates':[
+                        {'path':'a.py','citation':False},
+                        {'path':'../outside.py','citation':False}]},
+                    'steps':[{'tool':'search_file','source_refs':['a.py:2']}]}
+            }
+            result=run.score_evidence(root,case,record)
+            self.assertEqual(result['candidate_file_recall_at_8'],1.0)
+            self.assertEqual(result['observed_file_recall'],1.0)
+            self.assertEqual(result['observed_span_recall'],1.0)
+            self.assertEqual(result['gold_file_recall_proxy'],0.0)
+            self.assertEqual(result['gold_span_recall_proxy'],0.0)
+            self.assertEqual(result['citation_validity'],1.0)
+
     def test_production_has_no_dependency_on_benchmark(self):
         # Test from parent root without executing the model, importing application
         # modules, or modifying any production source.
