@@ -174,7 +174,7 @@
       ]
     },
     {
-      "id": "testing.contract",
+      "id": "testing.consumer_contract",
       "domain": "security",
       "label": "Contract testing",
       "description": "Consumer/provider contract tests verify interface expectations across service boundaries.",
