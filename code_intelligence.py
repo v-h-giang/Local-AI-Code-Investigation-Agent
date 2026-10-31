@@ -777,6 +777,29 @@ def search_file_candidates(repo, query, limit=6, *, strategy='v59'):
         for row in ranked:
             if len(result)>=limit:break
             append(row,cap=limit)
+    if strategy=='v59':
+        # Conservative deployment: original keyword retrieval owns the first
+        # eight discovery slots. KB/symbol/graph hints can fill unused slots
+        # and the remaining candidate window, but cannot displace these
+        # proven baseline navigation leads. This rule uses NO gold labels.
+        # When the baseline supplies fewer than eight, expansion can fill
+        # the gap. Keep the baseline's ranking and role diversity unchanged.
+        protected=search_file_candidates(
+            repo,query,limit=min(8,limit),strategy='baseline')
+        selected={item['path'] for item in protected}
+        merged=list(protected)
+        for item in result:
+            if len(merged)>=limit:break
+            if item['path'] not in selected:
+                merged.append(item)
+                selected.add(item['path'])
+        if len(merged)<limit:
+            for item in ranked:
+                if len(merged)>=limit:break
+                if item['path'] not in selected:
+                    merged.append(item)
+                    selected.add(item['path'])
+        return merged[:limit]
     return result
 
 
