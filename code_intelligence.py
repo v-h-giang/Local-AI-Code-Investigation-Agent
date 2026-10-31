@@ -444,6 +444,36 @@ def search_relevant_sources(repo, query, limit=10):
     return chosen
 
 
+def search_file_locations(repo, path, query, limit=8):
+    """Find real line-numbered source evidence inside a discovered file.
+
+    The path must be a permitted repository file. FTS5 matches source text;
+    filenames alone never produce line citations.
+    """
+    if not isinstance(path,str):
+        raise ValueError('Source path must be a string')
+    repo._safe(path)
+    terms = []
+    for term in re.findall(r'[A-Za-z0-9_]+', str(query or '')):
+        if len(term) < 3 or term.lower() in _SEARCH_STOPWORDS:
+            continue
+        if term.lower() not in {x.lower() for x in terms}:
+            terms.append(term)
+        if len(terms) >= 9:
+            break
+    if not terms:
+        return []
+    expression = ' OR '.join('"' + term + '"' for term in terms)
+    with closing(_connect(repo)) as conn:
+        rows = conn.execute(
+            'SELECT path,line,snippet(search_fts,2,"[","]"," … ",18) AS excerpt,'
+            'bm25(search_fts) AS rank FROM search_fts '
+            'WHERE path=? AND search_fts MATCH ? ORDER BY rank LIMIT ?',
+            (path, expression, min(30, max(1, int(limit))))
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 # File discovery is separate from line citations: filenames are navigational
 # candidates, not proof that a statement appears at a particular source line.
 _FILE_SYNONYMS = {
