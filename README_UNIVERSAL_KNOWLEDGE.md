@@ -181,7 +181,12 @@ A query now follows two independent paths:
 
 The graph cannot prove runtime behavior. The limited aliases and caps trade
 off precision and recall; this is not LLM semantic embedding search.
-The legacy deterministic ranker is preserved as `strategy="baseline"` so
+V5.9.1 conservatively protects the baseline's first eight discovery results
+from being displaced by KB/graph candidates. Additional candidates can fill
+remaining slots; recall at 20 can still improve or regress and must be measured.
+This guard protects candidate coverage, **not answer correctness** or runtime
+performance. V5.9 runs an additional baseline lookup, so measure latency too.
+The legacy deterministic ranker remains available as `strategy="baseline"` so
 the same frozen repository/index can be used for a paired A/B comparison.
 
 ```powershell
