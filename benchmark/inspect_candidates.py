@@ -40,6 +40,55 @@ def summarize_candidate_results(results):
 
 
 
+
+def evaluate_case(repo, case, *, strategy='v59', limit=20):
+    ranked=search_file_candidates(
+        repo,case['question'],limit=max(20,limit),strategy=strategy)
+    gold={span['path'] for span in case['gold_spans']}
+    result={'id':case['id'],'gold_files':len(gold)}
+    for k in (8,20):
+        paths={item['path'] for item in ranked[:k]}
+        hits=sorted(paths & gold)
+        result[f'candidate_gold_hits_at_{k}']=len(hits)
+        result[f'candidate_recall_at_{k}']=round(len(hits)/len(gold),4) if gold else None
+    result['top_candidates']=[{'path':r['path'],'score':r['path_score'],
+                               'content_terms':r.get('content_terms',[]),
+                               'kb_fts_terms':r.get('kb_fts_terms',[]),
+                               'kb_symbol_terms':r.get('kb_symbol_terms',[]),
+                               'graph_neighbors':r.get('graph_neighbors',[])}
+                              for r in ranked[:max(1,min(20,limit))]]
+    return result
+
+
+def compare_candidate_results(baseline, modified):
+    """Paired A/B analysis on the SAME case IDs and frozen source index."""
+    left={x['id']:x for x in baseline}
+    right={x['id']:x for x in modified}
+    if set(left)!=set(right):
+        raise ValueError("A/B must use the same set of cases")
+    for cid in left:
+        if left[cid]['gold_files']!=right[cid]['gold_files']:
+            raise ValueError("A/B gold-file count differs for "+cid)
+    a=summarize_candidate_results(baseline)
+    b=summarize_candidate_results(modified)
+    deltas={f'micro_recall_at_{k}':round(
+        b[f'micro_recall_at_{k}']-a[f'micro_recall_at_{k}'],4)
+        if b[f'micro_recall_at_{k}'] is not None
+        and a[f'micro_recall_at_{k}'] is not None else None
+        for k in (8,20)}
+    changes={}
+    for k in (8,20):
+        gained=[];lost=[]
+        for cid in sorted(left):
+            before=left[cid][f'candidate_gold_hits_at_{k}']
+            after=right[cid][f'candidate_gold_hits_at_{k}']
+            if after>before:gained.append({'id':cid,'before':before,'after':after})
+            if after<before:lost.append({'id':cid,'before':before,'after':after})
+        changes[f'at_{k}']={'improved_cases':gained,'regressed_cases':lost}
+    return {'baseline':a,'v59':b,'delta':deltas,'case_changes':changes}
+
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--from-run',required=True,
@@ -48,6 +97,8 @@ def main(argv=None):
                         default='repocontextbench')
     parser.add_argument('--case-id',action='append',default=[])
     parser.add_argument('--limit',type=int,default=20)
+    parser.add_argument('--compare',action='store_true',
+                        help='Paired baseline vs V5.9 retrieval on the same cached index')
     parser.add_argument('--summary-only',action='store_true',
                         help='Print only aggregate recalls across the selected cases')
     args=parser.parse_args(argv)
@@ -67,22 +118,15 @@ def main(argv=None):
     if wanted:selected=[c for c in selected if c['id'] in wanted]
     repo=Repo(checkout)
     repo.intelligence_db=index
-    results=[]
-    for case in selected:
-        ranked=search_file_candidates(repo,case['question'],limit=max(20,args.limit))
-        gold={span['path'] for span in case['gold_spans']}
-        result={'id':case['id'],'gold_files':len(gold)}
-        for k in (8,20):
-            paths={item['path'] for item in ranked[:k]}
-            hits=sorted(paths & gold)
-            result[f'candidate_gold_hits_at_{k}']=len(hits)
-            result[f'candidate_recall_at_{k}']=round(len(hits)/len(gold),4) if gold else None
-        result['top_candidates']=[{'path':r['path'],'score':r['path_score'],
-                                   'content_terms':r.get('content_terms',[])}
-                                  for r in ranked[:max(1,min(20,args.limit))]]
-        results.append(result)
+    results=[evaluate_case(repo,case,limit=args.limit) for case in selected]
     aggregate=summarize_candidate_results(results)
-    report={'suite':suite,'run_id':run_id,'summary':aggregate}
+    report={'suite':suite,'run_id':run_id,'strategy':'v59','summary':aggregate}
+    if args.compare:
+        baseline=[evaluate_case(repo,case,strategy='baseline',limit=args.limit)
+                  for case in selected]
+        report['comparison']=compare_candidate_results(baseline,results)
+        if not args.summary_only:
+            report['baseline_cases']=baseline
     if not args.summary_only:
         report['cases']=results
     print(json.dumps(report,ensure_ascii=False,indent=2))
