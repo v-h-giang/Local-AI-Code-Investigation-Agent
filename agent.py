@@ -24,6 +24,12 @@ def main(argv=None):
     kb.add_argument('question',nargs='?',default='')
     kb.add_argument('--kb-path',default=None,help='Optional SQLite knowledge DB location')
     kb.add_argument('--pack-dir',default=None,help='Local JSON pack directory for build')
+    li = sub.add_parser('lsp-import',help='Import a pre-exported LSP JSON symbol-location array')
+    li.add_argument('file',help='Local JSON file; this never launches a language server')
+    li.add_argument('--out',default='output/architecture')
+    ls = sub.add_parser('lsp-symbol',help='Find previously imported LSP symbol locations')
+    ls.add_argument('symbol')
+    ls.add_argument('--out',default='output/architecture')
     d = sub.add_parser('doctor', help='Verify Ollama and report source summary')
     d.add_argument('--probe', action='store_true', help='Actually load model and generate a tiny reply')
     sub.add_parser('index', help='Rebuild local SQLite FTS search index')
@@ -143,6 +149,15 @@ def main(argv=None):
                     a.question,db_path=a.kb_path)}
             else:
                 result=knowledge_status(db_path=a.kb_path)
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+            return 0
+        if a.command in ('lsp-import','lsp-symbol'):
+            from lsp_bridge import import_lsp_locations,lookup_lsp_locations
+            repo.intelligence_db=(Path(a.out).expanduser().resolve()/
+                                  'middle-files'/'code_intelligence.sqlite')
+            result=(import_lsp_locations(repo,a.file)
+                    if a.command=='lsp-import'
+                    else lookup_lsp_locations(repo,a.symbol))
             print(json.dumps(result,ensure_ascii=False,indent=2))
             return 0
         if a.command in ('architecture','investigate','synthesize') and not 1 <= a.max_llm_calls <= 5000:
