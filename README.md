@@ -4,6 +4,18 @@
 
 **Language:** English · [Tiếng Việt](README-VN.md)
 
+## Universal Code Knowledge Base (V5.4–V5.8 foundation)
+
+The agent now has a multi-language file registry, optional Tree-sitter and
+conservative lexical declaration adapters, a versioned SQLite global programming
+concept database, repository module profiles, and an opt-in import bridge for
+pre-exported LSP symbol locations. The global KB has **31 curated seed concepts**,
+not encyclopedic coverage. These are search hints, **never source citations**.
+
+See [Universal Knowledge guide](README_UNIVERSAL_KNOWLEDGE.md) for the clickable
+table of contents, knowledge pack format, offline commands, limitations and
+benchmark instructions. `setup.ps1` retains `-OllamaMode Auto` by default.
+
 ## Quick start — one command
 
 Open PowerShell in the repository folder (where `agent.py` lives). Replace the two Windows paths:
