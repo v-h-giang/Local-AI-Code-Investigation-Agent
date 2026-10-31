@@ -221,6 +221,14 @@ try {
     }
     Write-Host '[Setup] Core Python modules: OK'
 
+    # Offline curated programming knowledge is independent from any project.
+    # A failed user-profile write must never prevent source search or setup.
+    Write-Host '[Setup] Initializing local universal programming knowledge ...'
+    & $venvPython -c 'from knowledge_base import build_knowledge; print(build_knowledge())'
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'Knowledge Base initialization failed. Basic source indexing still works; retry with: python agent.py --project . knowledge build'
+    }
+
     if ($RunTests) {
         # unittest writes progress to stderr even on success; preserve its raw
         # output in files instead of treating normal output as PowerShell errors.
