@@ -115,6 +115,40 @@ class KnowledgeRetrievalV59Test(unittest.TestCase):
         hits=search_file_candidates(repo,"retry",limit=8)
         self.assertEqual(hits[0]["path"],"retry_handler.py")
 
+    def test_v591_preserves_baseline_top8_when_kb_distractors_compete(self):
+        # Baseline must retain its eight strongest file candidates even when
+        # many knowledge-expanded files have higher synthetic lexical scores.
+        for n in range(12):
+            (self.src/('retry_handler_%02d.py' % n)).write_text(
+                'def retry_operation():\n    return 1\n',encoding='utf-8')
+            (self.src/('background_%02d.py' % n)).write_text(
+                'def backoff():\n    return 2\n',encoding='utf-8')
+        repo=self._repo()
+        question='Where is retry handled?'
+        baseline=search_file_candidates(repo,question,limit=20,strategy='baseline')
+        expanded=search_file_candidates(repo,question,limit=20,strategy='v59')
+        self.assertGreaterEqual(len(baseline),8)
+        self.assertEqual(
+            [r['path'] for r in expanded[:8]],
+            [r['path'] for r in baseline[:8]])
+        self.assertEqual(len({r['path'] for r in expanded}),len(expanded))
+        self.assertTrue(all(r['citation'] is False for r in expanded))
+
+    def test_v591_expansion_fills_after_protected_baseline(self):
+        (self.src/'retry_handler.py').write_text(
+            'def retry_handler():\n    return 1\n',encoding='utf-8')
+        (self.src/'background_tasks.py').write_text(
+            'def backoff():\n    return 2\n',encoding='utf-8')
+        repo=self._repo()
+        q='retry'
+        baseline=search_file_candidates(repo,q,limit=20,strategy='baseline')
+        expanded=search_file_candidates(repo,q,limit=20,strategy='v59')
+        self.assertEqual([r['path'] for r in expanded[:len(baseline)]],
+                         [r['path'] for r in baseline])
+        self.assertIn('background_tasks.py',
+                      {r['path'] for r in expanded})
+        self.assertEqual(len({r['path'] for r in expanded}),len(expanded))
+
     def test_reject_invalid_strategy(self):
         (self.src/"retry_handler.py").write_text(
             "def retry_handler():\n    return 1\n",encoding="utf-8")
