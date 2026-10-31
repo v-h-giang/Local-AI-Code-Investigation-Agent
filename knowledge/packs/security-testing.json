@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "pack_id": "security-testing",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "concepts": [
+    {
+      "id": "security.sqli",
+      "domain": "security",
+      "label": "SQL injection",
+      "description": "Untrusted values improperly assembled into SQL statements may change query semantics.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "SQL injection",
+        "sql injection",
+        "parameterized sql",
+        "prepared statement"
+      ]
+    },
+    {
+      "id": "security.xss",
+      "domain": "security",
+      "label": "Cross-site scripting",
+      "description": "Untrusted content rendered in browser execution contexts may execute unwanted code.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Cross-site scripting",
+        "xss",
+        "html escaping",
+        "cross site scripting"
+      ]
+    },
+    {
+      "id": "security.csrf",
+      "domain": "security",
+      "label": "Cross-site request forgery",
+      "description": "A user browser can be induced to submit an unintended authenticated request.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Cross-site request forgery",
+        "csrf",
+        "same site cookie",
+        "anti csrf token"
+      ]
+    },
+    {
+      "id": "security.ssrf",
+      "domain": "security",
+      "label": "Server-side request forgery",
+      "description": "Untrusted URL inputs can cause a server to contact unintended network targets.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Server-side request forgery",
+        "ssrf",
+        "url allowlist",
+        "metadata service request"
+      ]
+    },
+    {
+      "id": "security.pathtraversal",
+      "domain": "security",
+      "label": "Path traversal",
+      "description": "Improper path validation can allow access outside the intended root directory.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Path traversal",
+        "directory traversal",
+        "path traversal",
+        "dot dot path"
+      ]
+    },
+    {
+      "id": "security.command",
+      "domain": "security",
+      "label": "Command injection",
+      "description": "Passing untrusted text into shell commands may allow unintended command execution.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Command injection",
+        "command injection",
+        "shell injection",
+        "subprocess shell"
+      ]
+    },
+    {
+      "id": "security.authz",
+      "domain": "security",
+      "label": "Broken authorization",
+      "description": "Insufficient authorization checks can expose cross-user or cross-tenant resources.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Broken authorization",
+        "authorization check",
+        "idor",
+        "broken access control"
+      ]
+    },
+    {
+      "id": "security.secrets",
+      "domain": "security",
+      "label": "Secret handling",
+      "description": "Sensitive credentials should be protected against logs, source commits and unauthorized reads.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Secret handling",
+        "hardcoded secret",
+        "api key exposure",
+        "credential leak"
+      ]
+    },
+    {
+      "id": "security.race",
+      "domain": "security",
+      "label": "Race condition",
+      "description": "Concurrent operations on shared state can produce incorrect behavior when not synchronized.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Race condition",
+        "race condition",
+        "data race",
+        "atomic operation"
+      ]
+    },
+    {
+      "id": "security.deadlock",
+      "domain": "security",
+      "label": "Deadlock",
+      "description": "Mutually waiting tasks may block progress when locks or resources form a cycle.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Deadlock",
+        "deadlock",
+        "lock inversion",
+        "lock ordering"
+      ]
+    },
+    {
+      "id": "security.memory",
+      "domain": "security",
+      "label": "Memory safety",
+      "description": "Memory lifetime and bounds errors include use-after-free, buffer overflows and invalid access.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Memory safety",
+        "buffer overflow",
+        "use after free",
+        "out of bounds"
+      ]
+    },
+    {
+      "id": "testing.unit",
+      "domain": "security",
+      "label": "Unit test isolation",
+      "description": "Unit tests focus on an isolated behavior using controlled inputs and dependencies.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Unit test isolation",
+        "unit test",
+        "test double",
+        "mock object"
+      ]
+    },
+    {
+      "id": "testing.integration",
+      "domain": "security",
+      "label": "Integration testing",
+      "description": "Integration tests validate behavior across component boundaries and real integrations.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Integration testing",
+        "integration test",
+        "integration suite",
+        "end to end"
+      ]
+    },
+    {
+      "id": "testing.contract",
+      "domain": "security",
+      "label": "Contract testing",
+      "description": "Consumer/provider contract tests verify interface expectations across service boundaries.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Contract testing",
+        "contract testing",
+        "pact testing",
+        "api contract"
+      ]
+    },
+    {
+      "id": "testing.property",
+      "domain": "security",
+      "label": "Property-based testing",
+      "description": "Property-based tests generate many inputs to check general invariants.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Property-based testing",
+        "hypothesis testing",
+        "property based test",
+        "quickcheck"
+      ]
+    },
+    {
+      "id": "testing.fuzz",
+      "domain": "security",
+      "label": "Fuzz testing",
+      "description": "Fuzzing generates varied or malformed inputs to uncover crashes and unexpected behavior.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Fuzz testing",
+        "fuzzer",
+        "fuzzing",
+        "libfuzzer",
+        "afl"
+      ]
+    },
+    {
+      "id": "testing.mutation",
+      "domain": "security",
+      "label": "Mutation testing",
+      "description": "Mutation testing changes code to evaluate whether the test suite detects altered behavior.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Mutation testing",
+        "mutation testing",
+        "mutant",
+        "mutation score"
+      ]
+    },
+    {
+      "id": "testing.coverage",
+      "domain": "security",
+      "label": "Test coverage",
+      "description": "Coverage reports which lines, branches or conditions were executed by tests.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Test coverage",
+        "branch coverage",
+        "line coverage",
+        "mc dc"
+      ]
+    },
+    {
+      "id": "analysis.taint",
+      "domain": "security",
+      "label": "Taint analysis",
+      "description": "Taint tracking follows untrusted data from sources through transformations to sinks.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Taint analysis",
+        "taint",
+        "taint tracking",
+        "source sink"
+      ]
+    },
+    {
+      "id": "analysis.sast",
+      "domain": "security",
+      "label": "Static application security testing",
+      "description": "Static security analysis inspects source or binaries without executing the program.",
+      "source": "https://owasp.org/www-project-top-ten/",
+      "aliases": [
+        "Static application security testing",
+        "sast",
+        "static security scan",
+        "codeql"
+      ]
+    }
+  ],
+  "relations": []
+}
