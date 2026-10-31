@@ -45,6 +45,12 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(sum(x['suite'] == 'stackrepoqa' for x in cases), 10)
         self.assertEqual(sum(len(x['gold_spans']) for x in cases), 99)
 
+    def test_preflight_registry_includes_new_source_languages_without_import(self):
+        accessible,scanned,_=run.configured_extensions()
+        for extension in ('.f90','.cpp','.rs','.go','.ts','.kt','.swift','.proto'):
+            self.assertIn(extension,accessible)
+            self.assertIn(extension,scanned)
+
     def test_repo_pins_match(self):
         for case in run.read_cases():
             self.assertEqual((case['repo'], case['commit']), run.REPOS[case['suite']][:2])
