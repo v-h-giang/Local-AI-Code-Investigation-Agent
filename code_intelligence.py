@@ -546,8 +546,15 @@ def search_file_candidates(repo, query, limit=6, *, strategy='v59'):
     """
     if not isinstance(query, str) or not query.strip():
         return []
-    if strategy not in ('v59','baseline'):
-        raise ValueError("strategy must be v59 or baseline")
+    if strategy not in ('v59','baseline','v510'):
+        raise ValueError("strategy must be v59, baseline, or v510")
+    if strategy=='v510':
+        # V5.10 is experimental and must never silently replace the default.
+        from retrieval_fusion import fusion_exploration, fuse_baseline_exploration
+        size=max(1,min(50,int(limit)))
+        baseline=search_file_candidates(repo,query,limit=size,strategy='baseline')
+        novel=fusion_exploration(repo,query,baseline,limit=size)
+        return fuse_baseline_exploration(baseline,novel,limit=size)
     words=[]
     for word in re.findall(r'[A-Za-z0-9_]+', query.lower()):
         if len(word)>=3 and word not in _SEARCH_STOPWORDS and word not in words:
