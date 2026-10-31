@@ -569,7 +569,7 @@ def search_file_candidates(repo, query, limit=6, *, strategy='v59'):
     # Baseline keeps the previous KB path score but not V5.9's secondary
     # candidate discovery. The terms below are strictly bounded navigation
     # hints; no KB result is treated as verified source evidence.
-    expansion_terms=(safe_knowledge_terms(knowledge_terms,words,max_terms=6)
+    expansion_terms=(safe_knowledge_terms(knowledge_terms,words,limit=6)
                      if strategy=='v59' else [])
     vocabulary=[]
     # FTS must not OR high-frequency conversational words into a query:
