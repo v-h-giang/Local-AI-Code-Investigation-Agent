@@ -4,7 +4,10 @@
 param(
     [switch]$PullModel,
     [switch]$WithTreeSitter,
-    [switch]$RunTests
+    [switch]$RunTests,
+    [ValidateSet('Auto','GPU','CPU','Skip')]
+    [string]$OllamaMode = 'Auto',
+    [switch]$ProcessOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,8 +15,162 @@ $repoRoot = $PSScriptRoot
 $venvDir = Join-Path $repoRoot '.venv'
 $venvPython = Join-Path $venvDir 'Scripts\python.exe'
 
+function Set-RecommendedEnv {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [AllowNull()][string]$Value
+    )
+    # A null value clears an old CPU mask or GPU override when switching modes.
+    if ($null -eq $Value) {
+        [Environment]::SetEnvironmentVariable($Name, $null, 'Process')
+        if (-not $ProcessOnly) {
+            [Environment]::SetEnvironmentVariable($Name, $null, 'User')
+        }
+        Write-Host "[Setup] $Name=(unset)"
+    }
+    else {
+        [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
+        if (-not $ProcessOnly) {
+            [Environment]::SetEnvironmentVariable($Name, $Value, 'User')
+        }
+        Write-Host "[Setup] $Name=$Value"
+    }
+}
+
+function Set-DefaultEnv {
+    param([string]$Name, [string]$Value)
+    # Do not overwrite a value deliberately configured outside setup.
+    $existing = [Environment]::GetEnvironmentVariable($Name, 'User')
+    if (-not $ProcessOnly -and -not [string]::IsNullOrWhiteSpace($existing)) {
+        [Environment]::SetEnvironmentVariable($Name, $existing, 'Process')
+        Write-Host "[Setup] $Name=$existing (existing User value retained)"
+        return
+    }
+    $existing = [Environment]::GetEnvironmentVariable($Name, 'Process')
+    if (-not [string]::IsNullOrWhiteSpace($existing)) {
+        Write-Host "[Setup] $Name=$existing (existing Process value retained)"
+        return
+    }
+    Set-RecommendedEnv -Name $Name -Value $Value
+}
+
+function Get-LocalHardware {
+    $names = @()
+    $ramGiB = $null
+    try {
+        $names = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+                    ForEach-Object { $_.Name } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    catch {
+        Write-Warning 'GPU detection unavailable. Ollama automatic GPU discovery will be used.'
+    }
+    try {
+        $machine = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        $ramGiB = [math]::Round($machine.TotalPhysicalMemory / 1GB, 1)
+    }
+    catch {
+        Write-Warning 'RAM detection unavailable; conservative 2048-token context recommended.'
+    }
+    $vendor = 'Unknown'
+    # A separate NVIDIA GPU should take precedence over shared-memory iGPU.
+    if (@($names | Where-Object { $_ -match 'NVIDIA' }).Count -gt 0) {
+        $vendor = 'NVIDIA'
+    }
+    elseif (@($names | Where-Object { $_ -match 'AMD|Radeon' }).Count -gt 0) {
+        $vendor = 'AMD'
+    }
+    elseif (@($names | Where-Object { $_ -match 'Intel' }).Count -gt 0) {
+        $vendor = 'Intel'
+    }
+    return [pscustomobject]@{
+        Vendor = $vendor
+        Names = $names
+        RamGiB = $ramGiB
+    }
+}
+
+function Configure-OllamaEnvironment {
+    param([string]$Mode)
+    Set-DefaultEnv -Name 'PYTHONUTF8' -Value '1'
+    Set-DefaultEnv -Name 'PYTHONIOENCODING' -Value 'utf-8'
+    if ($Mode -eq 'Skip') {
+        Write-Host '[Setup] Ollama environment skipped. UTF-8 still configured.'
+        return
+    }
+
+    $hardware = Get-LocalHardware
+    Write-Host ('[Setup] Detected GPUs: ' + (($hardware.Names | ForEach-Object { $_ }) -join '; '))
+    Write-Host "[Setup] Preferred GPU vendor: $($hardware.Vendor); RAM: $($hardware.RamGiB) GiB"
+    $selected = $Mode
+    if ($Mode -eq 'Auto') {
+        $selected = if ($hardware.Vendor -eq 'Unknown') { 'NativeAuto' } else { 'GPU' }
+    }
+    if ($selected -eq 'GPU' -and $hardware.Vendor -eq 'Unknown') {
+        Write-Warning 'GPU requested but no GPU vendor detected; preserving native Ollama auto detection.'
+        $selected = 'NativeAuto'
+    }
+
+    # Always reset CPU-only masks when returning to Auto/GPU. These variables
+    # affect the Ollama SERVER process, not just the Python API client.
+    if ($selected -eq 'CPU') {
+        Set-RecommendedEnv -Name 'OLLAMA_VULKAN' -Value '0'
+        Set-RecommendedEnv -Name 'OLLAMA_IGPU_ENABLE' -Value '0'
+        Set-RecommendedEnv -Name 'GGML_VK_VISIBLE_DEVICES' -Value '-1'
+        Set-RecommendedEnv -Name 'CUDA_VISIBLE_DEVICES' -Value '-1'
+        Set-RecommendedEnv -Name 'ROCR_VISIBLE_DEVICES' -Value '-1'
+    }
+    else {
+        Set-RecommendedEnv -Name 'CUDA_VISIBLE_DEVICES' -Value $null
+        Set-RecommendedEnv -Name 'ROCR_VISIBLE_DEVICES' -Value $null
+        Set-RecommendedEnv -Name 'GGML_VK_VISIBLE_DEVICES' -Value $null
+        if ($hardware.Vendor -eq 'Intel') {
+            # Intel integrated graphics require an explicit iGPU opt-in on
+            # affected Windows Ollama versions. Vulkan uses shared RAM.
+            Set-RecommendedEnv -Name 'OLLAMA_VULKAN' -Value '1'
+            Set-RecommendedEnv -Name 'OLLAMA_IGPU_ENABLE' -Value '1'
+        }
+        elseif ($hardware.Vendor -eq 'NVIDIA') {
+            # Prefer CUDA and avoid shared-memory Vulkan iGPU selection in
+            # hybrid Intel/NVIDIA laptops.
+            Set-RecommendedEnv -Name 'OLLAMA_VULKAN' -Value '0'
+            Set-RecommendedEnv -Name 'OLLAMA_IGPU_ENABLE' -Value $null
+        }
+        else {
+            # AMD and unknown vendors retain Ollama's own native/Vulkan
+            # detection rather than forcing an unverified compute backend.
+            Set-RecommendedEnv -Name 'OLLAMA_VULKAN' -Value $null
+            Set-RecommendedEnv -Name 'OLLAMA_IGPU_ENABLE' -Value $null
+        }
+    }
+
+    # Conservative defaults for memory-constrained code investigation.
+    # Preserve existing user overrides; agent.py sends num_ctx=2048 anyway.
+    if ($null -eq $hardware.RamGiB -or $hardware.RamGiB -le 24) {
+        $defaultContext = '2048'
+    }
+    elseif ($hardware.RamGiB -le 48) {
+        $defaultContext = '4096'
+    }
+    else {
+        $defaultContext = '8192'
+    }
+    Set-DefaultEnv -Name 'OLLAMA_CONTEXT_LENGTH' -Value $defaultContext
+    Set-DefaultEnv -Name 'OLLAMA_NUM_PARALLEL' -Value '1'
+    Set-DefaultEnv -Name 'OLLAMA_MAX_LOADED_MODELS' -Value '1'
+    $scope = if ($ProcessOnly) { 'Process only' } else { 'User + current Process' }
+    Write-Host "[Setup] Ollama mode: $selected; scope: $scope"
+    Write-Warning 'GPU detection is heuristic. Stop Ollama via system tray, restart it from Start menu, then run: ollama run qwen3:8b "hello"; ollama ps'
+    if ($ProcessOnly) {
+        Write-Warning 'ProcessOnly settings are not inherited by an already-running Ollama desktop server. For persistent Windows GUI settings, run setup without -ProcessOnly.'
+    }
+}
+
 Push-Location $repoRoot
 try {
+    # Configure before running child Python/test processes.
+    Configure-OllamaEnvironment -Mode $OllamaMode
+
     if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
         throw 'Python launcher (py.exe) not found. Install Python 3.11+ for Windows and enable the Python launcher.'
     }
@@ -117,6 +274,8 @@ try {
     Write-Host '  .\.venv\Scripts\python.exe -m unittest discover -s tests -v'
     Write-Host '  .\.venv\Scripts\python.exe benchmark\run.py --preflight'
     Write-Host 'Optional activation: .\.venv\Scripts\Activate.ps1'
+    Write-Host 'Backend override examples: .\setup.ps1 -OllamaMode CPU | .\setup.ps1 -OllamaMode GPU'
+    Write-Host 'Restart Ollama after changing backend. ollama ps verifies actual CPU/GPU use.'
 }
 finally {
     Pop-Location
