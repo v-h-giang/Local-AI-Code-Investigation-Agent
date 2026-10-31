@@ -13,6 +13,31 @@ import run
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_offline_candidate_summary_micro_macro_and_zero_hits(self):
+        from inspect_candidates import summarize_candidate_results
+        rows=[
+            {'id':'a','gold_files':2,'candidate_gold_hits_at_8':1,
+             'candidate_recall_at_8':0.5,'candidate_gold_hits_at_20':2,
+             'candidate_recall_at_20':1.0},
+            {'id':'b','gold_files':4,'candidate_gold_hits_at_8':0,
+             'candidate_recall_at_8':0.0,'candidate_gold_hits_at_20':1,
+             'candidate_recall_at_20':0.25},
+            {'id':'no-gold','gold_files':0,'candidate_gold_hits_at_8':0,
+             'candidate_recall_at_8':None,'candidate_gold_hits_at_20':0,
+             'candidate_recall_at_20':None},
+        ]
+        summary=summarize_candidate_results(rows)
+        self.assertEqual(summary['cases'],3)
+        self.assertEqual(summary['scorable_cases'],2)
+        self.assertEqual(summary['gold_files'],6)
+        self.assertEqual(summary['gold_hits_at_8'],1)
+        self.assertEqual(summary['micro_recall_at_8'],0.1667)
+        self.assertEqual(summary['macro_recall_at_8'],0.25)
+        self.assertEqual(summary['micro_recall_at_20'],0.5)
+        self.assertEqual(summary['macro_recall_at_20'],0.625)
+        self.assertEqual(summary['zero_hit_case_ids_at_8'],['b'])
+        self.assertEqual(summary['zero_hit_case_ids_at_20'],[])
+
     def test_dataset_exactly_30(self):
         cases = run.read_cases()
         self.assertEqual(len(cases), 30)
