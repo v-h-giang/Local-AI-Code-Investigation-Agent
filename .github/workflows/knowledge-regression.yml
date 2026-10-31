@@ -1,0 +1,40 @@
+name: Offline source knowledge regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/knowledge-regression.yml"
+      - "knowledge/**"
+      - "knowledge_base.py"
+      - "language_registry.py"
+      - "universal_symbols.py"
+      - "repository_knowledge.py"
+      - "lsp_bridge.py"
+      - "codebase.py"
+      - "architecture.py"
+      - "code_intelligence.py"
+      - "agent.py"
+      - "tests/**"
+      - "benchmark/tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Production tests (no Ollama required)
+        run: python -m unittest discover -s tests -v
+      - name: Benchmark harness tests (no model required)
+        run: python -m unittest discover -s benchmark/tests -v
