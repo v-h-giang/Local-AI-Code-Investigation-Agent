@@ -194,6 +194,17 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn('gold_spans_unsupported', proc.stdout)
 
+    def test_exact_case_id_selection_is_available_without_model(self):
+        chosen='repo_context_bench_agent_framework_practical_0011'
+        proc=subprocess.run([sys.executable,str(ROOT / 'run.py'),
+                             '--suite','repocontextbench','--list',
+                             '--case-id',chosen],
+                            capture_output=True,text=True,timeout=20)
+        self.assertEqual(proc.returncode,0,proc.stderr)
+        self.assertIn(chosen,proc.stdout)
+        self.assertIn('Total: 1',proc.stdout)
+        self.assertNotIn('practical_0001 ',proc.stdout)
+
     def test_list_requires_no_model_or_repo_checkout(self):
         proc = subprocess.run([sys.executable, str(ROOT / 'run.py'), '--list'],
                               capture_output=True, text=True, timeout=20)
