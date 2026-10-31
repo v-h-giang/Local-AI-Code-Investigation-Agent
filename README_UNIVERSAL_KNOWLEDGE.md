@@ -13,7 +13,7 @@
 
 ## 1. Phạm vi thực tế
 
-This implementation provides a **local, extensible knowledge foundation**, not an exhaustive database of all programming facts. The seed pack covers 31 broad programming concepts, with aliases and typed relations. Users can add local JSON packs without changing production Python logic.
+This implementation provides a **local, extensible knowledge foundation**, not an exhaustive database of all programming facts. Six bundled packs contain 126 curated programming concepts, with aliases and typed relations. Users can add local JSON packs without changing production Python logic.
 
 Version labels describe implementation areas, **not full semantic correctness**:
 - **V5.4**: central file/language registry; conservative extra symbol extractors; optional Tree-sitter grammar selection.
@@ -78,7 +78,7 @@ To use a different global SQLite file, pass `--kb-path "D:\knowledge\global.sqli
 
 ## 5. Knowledge packs
 
-Default seed: [knowledge/packs/core-programming.json](knowledge/packs/core-programming.json).
+Bundled seeds: [knowledge/packs/](knowledge/packs/) (six versioned packs: core, languages/systems, backend/cloud, security/testing, data/frontend/AI, and legacy/enterprise).
 
 Example schema (illustration, not an additional pack):
 
