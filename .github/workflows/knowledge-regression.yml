@@ -17,6 +17,7 @@ on:
       - "agent.py"
       - "tests/**"
       - "benchmark/tests/**"
+      - "benchmark/inspect_candidates.py"
   workflow_dispatch:
 
 permissions:
