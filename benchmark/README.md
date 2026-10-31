@@ -30,6 +30,25 @@ Dataset references:
 - https://github.com/CodeAlive-AI/repo-context-bench/blob/main/dataset/agent-framework/v1/tasks.jsonl
 - https://github.com/code-world-no-blanket/StackRepoQA/blob/main/data/questions.csv
 
+## V5.9 A/B comparison (offline, no Ollama)
+
+Run the **same 20 RepoContextBench questions, same pinned checkout, same SQLite
+index** against both the previous baseline ranker and V5.9:
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\inspect_candidates.py `
+  --from-run universal_kb_offline_fresh_1 `
+  --suite repocontextbench `
+  --limit 20 `
+  --compare `
+  --summary-only
+```
+
+The paired report includes `comparison.delta` and per-case improvements /
+regressions at 8 and 20 files. Compare with baseline micro recall @8=0.2203
+and @20=0.3390 **only if the old index and 20 cases are the same**. Any source
+graph connections remain candidate-only and do not prove runtime execution.
+
 ## Running
 
 From project root on Windows (PowerShell):
