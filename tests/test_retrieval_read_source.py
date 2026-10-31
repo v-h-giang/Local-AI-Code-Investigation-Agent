@@ -190,6 +190,30 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertTrue(matches)
         self.assertEqual(matches[0]['path'],'dotnet/src/CheckpointManager.cs')
 
+    def test_v53_checkpoint_manager_not_hidden_by_sibling_subdirectory(self):
+        # Checkpointing helper DTOs should not use up the quota belonging to
+        # the parent Workflows implementation directory.
+        src=self.root/'dotnet'/'src'/'Microsoft.Agents.AI.Workflows'
+        (src/'Checkpointing').mkdir(parents=True)
+        (src/'CheckpointManager.cs').write_text(
+            'public class CheckpointManager { public void ResumeCheckpoint() {} }\n',
+            encoding='utf-8')
+        (src/'CheckpointInfo.cs').write_text(
+            'public class CheckpointInfo {}\n',encoding='utf-8')
+        for name in ('ExecutorInfo.cs','ExecutorIdentityConverter.cs'):
+            (src/'Checkpointing'/name).write_text(
+                'public class ExecutorInfo { void ResumeCheckpoint() {} }\n',
+                encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name)/'output',verbose=False)
+        ranked=search_file_candidates(
+            self.repo,
+            'For a .NET workflow with mutable executor state, '
+            'what is needed to resume from a saved point?',
+            limit=8)
+        self.assertIn(
+            'dotnet/src/Microsoft.Agents.AI.Workflows/CheckpointManager.cs',
+            {row['path'] for row in ranked})
+
     def test_scoped_source_search_does_not_invent_citations(self):
         (self.root / 'checkpoint_resume.py').write_text(
             'def checkpoint():\n    return 1\n'
