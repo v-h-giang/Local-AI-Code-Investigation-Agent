@@ -208,7 +208,9 @@ def visible_tool_refs(project, investigation):
     for step in (investigation.get('steps') or []):
         if not isinstance(step,dict):
             continue
-        for raw in (step.get('source_refs') or []):
+        observation=step.get('observation') or {}
+        shown=(observation.get('visible_refs') or []) if isinstance(observation,dict) else []
+        for raw in list(step.get('source_refs') or [])+list(shown):
             if not isinstance(raw,str) or ':' not in raw:
                 continue
             path, _, line=raw.rpartition(':')
