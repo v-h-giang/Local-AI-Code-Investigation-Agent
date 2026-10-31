@@ -163,6 +163,36 @@ LSP line numbers are zero-based; the repository index uses one-based line number
 
 The bridge never launches an LSP server or executes inspected code; it is an opt-in adapter for information obtained separately. A future LSP client would need explicit trust boundaries and versioned server capabilities.
 
+## V5.9 — Two-pass concept retrieval
+
+A query now follows two independent paths:
+
+1. The **original search** uses exact question terms and bounded FTS5/BM25 as
+   before. It remains the strongest ranking signal.
+2. A **Knowledge Base expansion pass** selects up to six safe single-token
+   aliases from matched concepts. Those tokens search FTS5 separately and
+   find indexed symbol names (including CamelCase names).
+3. Files that match KB terms, but not the original question, are admitted
+   as *candidate paths*. The ranker combines original term, filename, symbol,
+   and KB evidence, then adds at most one hop of static/heuristic source-graph
+   neighbors from leading file candidates.
+4. No filename, KB concept, symbol hint, or graph association is a citation.
+   Final output needs an actual source line validated by the investigation.
+
+The graph cannot prove runtime behavior. The limited aliases and caps trade
+off precision and recall; this is not LLM semantic embedding search.
+The legacy deterministic ranker is preserved as `strategy="baseline"` so
+the same frozen repository/index can be used for a paired A/B comparison.
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\inspect_candidates.py --from-run universal_kb_offline_fresh_1 --suite repocontextbench --compare --summary-only --limit 20
+```
+
+The `comparison` output reports baseline, V5.9, deltas, improved cases
+and regressed cases at 8 and 20 candidates. It does **not** run Ollama, nor
+does it supply the benchmark gold evidence to the production retriever.
+The actual 20-case recall must be measured on the user's local prepared index.
+
 ## 8. Chạy benchmark
 
 First run the test suites shown above. The existing 20 RepoContextBench cases and 10 StackRepoQA cases remain unchanged; no benchmark gold labels are embedded into the knowledge packs or retrieval logic.
