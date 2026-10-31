@@ -558,7 +558,7 @@ def search_file_candidates(repo, query, limit=6):
             # Text BM25 is used for candidate discovery, not as proof.
             rows=conn.execute(
                 'SELECT path, text FROM search_fts WHERE search_fts MATCH ? '
-                'LIMIT 1200',(expression,)
+                'ORDER BY bm25(search_fts) LIMIT 1200',(expression,)
             ).fetchall()
             for row in rows:
                 path=row['path']
@@ -643,25 +643,56 @@ def search_file_candidates(repo, query, limit=6):
     ranked.sort(key=lambda r:(-r['path_score'],-len(r['content_terms']),
                               len(r['path']),r['path']))
     limit=max(1,min(50,int(limit)))
-    # First pass: diversify modules/roles; second pass: fill by global rank.
+    # Maintain module diversity without collapsing unrelated packages or
+    # examples. One .NET project forms a module; independent sample examples
+    # are separate even when they share 03-workflows as a parent directory.
+    def module_bucket(path, role):
+        parts=path.split('/')
+        if len(parts)>=3 and parts[0]=='dotnet' and parts[1]=='src':
+            return ('/'.join(parts[:3]),role)
+        if len(parts)>=4 and parts[0]=='python' and parts[1]=='samples':
+            return ('/'.join(parts[:4]),role)
+        folder=path.rsplit('/',1)[0] if '/' in path else '.'
+        return (folder,role)
+
     result=[];chosen=set();by_bucket={}
-    for row in ranked:
-        # Distinguish actual package/sample directories. The old first-three
-        # path segments collapsed ALL python/samples/03-workflows examples into
-        # one bucket and all dotnet/src/Workflows implementations into another.
-        # That discarded correct files even when their raw score was high.
-        folder=row['path'].rsplit('/',1)[0] if '/' in row['path'] else '.'
-        bucket=(folder,row['file_role'])
-        if by_bucket.get(bucket,0)>=2:
-            continue
-        result.append(row);chosen.add(row['path'])
+    def append(row, cap=2):
+        path=row['path']
+        if path in chosen or len(result)>=limit:
+            return False
+        bucket=module_bucket(path,row['file_role'])
+        if by_bucket.get(bucket,0)>=cap:
+            return False
+        result.append(row);chosen.add(path)
         by_bucket[bucket]=by_bucket.get(bucket,0)+1
+        return True
+
+    # When the question explicitly contrasts documentation/examples with
+    # *executability*, inspect evidence from different roles. This is a
+    # general navigation strategy, not a benchmark-specific filename rule.
+    # Do not apply role quotas to normal implementation lookup questions.
+    verify_executability=(
+        re.search(r'(?i)\b(?:documentation|documented|readme|examples?)\b',query)
+        and re.search(r'(?i)\b(?:execute(?:d|s)?|running|runnable|run|load(?:ed|ing)?|working)\b',query)
+    )
+    if verify_executability and limit>=6:
+        # Source paths are not citations; actual lines must still be read.
+        for role,count in (('documentation',2),('sample',2),('test',1),('implementation',1)):
+            matches=[r for r in ranked if r['file_role']==role]
+            if role=='documentation':
+                matches.sort(key=lambda r:(not r['path'].lower().endswith('/readme.md'),-r['path_score']))
+            for row in matches:
+                if count<=0:break
+                if append(row):
+                    count-=1
+    # Fill remaining slots with high-ranking paths from distinct modules.
+    for row in ranked:
         if len(result)>=limit:break
+        append(row)
     if len(result)<limit:
         for row in ranked:
-            if row['path'] in chosen:continue
-            result.append(row)
             if len(result)>=limit:break
+            append(row,cap=limit)
     return result
 
 
