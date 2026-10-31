@@ -57,6 +57,57 @@ class BenchmarkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             compare_candidate_results(before,after[:1])
 
+    def test_kb_diagnostic_reports_missing_index_and_stage_funnel(self):
+        from inspect_candidates import diagnose_case, summarize_diagnostics
+        from codebase import Repo
+        from code_intelligence import build_intelligence, search_file_candidates
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp)
+            source=folder/'project'
+            source.mkdir()
+            (source/'retry.py').write_text(
+                'def retry():\n    return 1\n',encoding='utf-8')
+            repo=Repo(source)
+            build_intelligence(repo,folder/'output',verbose=False)
+            case={'id':'demo','question':'retry operation',
+                  'gold_spans':[{'path':'retry.py'},
+                                {'path':'not-indexed.py'}]}
+            base=search_file_candidates(repo,case['question'],
+                limit=50,strategy='baseline')
+            variant=search_file_candidates(repo,case['question'],
+                limit=50,strategy='v59')
+            result=diagnose_case(repo,case,base,variant)
+            self.assertEqual(result['gold_indexed'],1)
+            self.assertEqual(result['diagnostic_category'],'gold-not-indexed')
+            self.assertEqual(result['gold_missing_from_index'],['not-indexed.py'])
+            self.assertEqual(
+                summarize_diagnostics([result])['gold_files_missing_from_index'],1)
+
+    def test_kb_diagnostic_ranking_does_not_mutate_production_paths(self):
+        from inspect_candidates import diagnose_case
+        from codebase import Repo
+        from code_intelligence import build_intelligence, search_file_candidates
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            source=root/'src'
+            source.mkdir()
+            (source/'recovery.py').write_text(
+                'def checkpoint():\n    return 1\n',encoding='utf-8')
+            repo=Repo(source)
+            build_intelligence(repo,root/'out',verbose=False)
+            query='checkpoint'
+            baseline=search_file_candidates(repo,query,limit=50,strategy='baseline')
+            v59=search_file_candidates(repo,query,limit=50,strategy='v59')
+            case={'id':'demo','question':query,
+                  'gold_spans':[{'path':'recovery.py'}]}
+            before=[r['path'] for r in v59[:8]]
+            report=diagnose_case(repo,case,baseline,v59)
+            self.assertEqual([r['path'] for r in v59[:8]],before)
+            self.assertEqual(report['gold_indexed'],1)
+            self.assertTrue(report['concept_ids'])
+            self.assertEqual(report['diagnostic_category'],'all-gold-top20')
+
     def test_dataset_exactly_30(self):
         cases = run.read_cases()
         self.assertEqual(len(cases), 30)
