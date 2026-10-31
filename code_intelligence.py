@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 from architecture import _scan, _module, load_architecture
 from language_registry import grammar_for
+from universal_symbols import lexical_symbols
 from codebase import Repo
 
 SCHEMA_VERSION = '49.3'
@@ -157,6 +158,14 @@ def _index_file(conn,repo,path,source):
             conn.execute('INSERT OR REPLACE INTO symbols VALUES (?,?,?,?,?,?,?,?,?)',
                 (_stable_id(kind,path,name,number),path,number,number,name,kind,
                  owner_name,snippet,_module(path)))
+    # Add conservative multi-language declarations that optional Tree-sitter
+    # grammars may not expose with a standard 'name' field (e.g. Fortran).
+    # Only symbol evidence is recorded; these hints do not assert call edges.
+    for kind,name,number in lexical_symbols(path,source):
+        snippet=lines[number-1].strip()[:240]
+        conn.execute('INSERT OR IGNORE INTO symbols VALUES (?,?,?,?,?,?,?,?,?)',
+            (_stable_id(kind,path,name,number),path,number,number,name,kind,'',
+             snippet,_module(path)))
     for i,line in enumerate(lines,1):
         clean=line.strip()
         if not clean:continue
