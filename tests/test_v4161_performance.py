@@ -29,7 +29,7 @@ class IndexPerformanceRegression(unittest.TestCase):
             self.assertEqual(first['changed_files'], 1)
             self.assertTrue(first['graph_rebuilt'])
             target = Path(first['index'])
-            with sqlite3.connect(target) as con:
+            with contextlib.closing(sqlite3.connect(target)) as con:
                 rows = con.execute('SELECT COUNT(*) FROM search_fts').fetchone()[0]
                 mappings = con.execute('SELECT COUNT(*) FROM fts_row_paths').fetchone()[0]
                 self.assertGreater(rows, 0)
@@ -45,7 +45,7 @@ class IndexPerformanceRegression(unittest.TestCase):
             third = build_intelligence(repo, out, verbose=False)
             self.assertEqual(third['changed_files'], 1)
             self.assertTrue(third['graph_rebuilt'])
-            with sqlite3.connect(target) as con:
+            with contextlib.closing(sqlite3.connect(target)) as con:
                 self.assertEqual(con.execute("SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH 'legacyUniqueToken'").fetchone()[0],0)
                 self.assertGreater(con.execute("SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH 'newUniqueToken'").fetchone()[0],0)
                 self.assertEqual(con.execute('SELECT COUNT(*) FROM search_fts').fetchone()[0],
