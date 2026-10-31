@@ -22,6 +22,7 @@ from language_registry import grammar_for
 from universal_symbols import lexical_symbols
 from repository_knowledge import ensure_module_schema, refresh_module_profiles
 from knowledge_base import expand_query_terms
+from knowledge_retrieval import safe_knowledge_terms, discover_concept_paths, related_source_paths
 from codebase import Repo
 
 SCHEMA_VERSION = '49.3'
@@ -537,7 +538,7 @@ def _path_words(path):
     return set(re.findall(r'[a-z0-9]+', divided.lower()))
 
 
-def search_file_candidates(repo, query, limit=6):
+def search_file_candidates(repo, query, limit=6, *, strategy='v59'):
     """Hybrid file retrieval: filename, indexed source terms and module diversity.
 
     No benchmark gold labels are used. File candidates do NOT grant citations.
@@ -545,6 +546,8 @@ def search_file_candidates(repo, query, limit=6):
     """
     if not isinstance(query, str) or not query.strip():
         return []
+    if strategy not in ('v59','baseline'):
+        raise ValueError("strategy must be v59 or baseline")
     words=[]
     for word in re.findall(r'[A-Za-z0-9_]+', query.lower()):
         if len(word)>=3 and word not in _SEARCH_STOPWORDS and word not in words:
@@ -563,6 +566,11 @@ def search_file_candidates(repo, query, limit=6):
     # Independent, versioned universal programming concepts enrich the
     # navigation score only. Never turn KB suggestions into source citations.
     knowledge_terms=expand_query_terms(query,max_terms=6)
+    # Baseline keeps the previous KB path score but not V5.9's secondary
+    # candidate discovery. The terms below are strictly bounded navigation
+    # hints; no KB result is treated as verified source evidence.
+    expansion_terms=(safe_knowledge_terms(knowledge_terms,words,max_terms=6)
+                     if strategy=='v59' else [])
     vocabulary=[]
     # FTS must not OR high-frequency conversational words into a query:
     # they swamp SQLite's bounded result set with unrelated documents.
@@ -589,6 +597,10 @@ def search_file_candidates(repo, query, limit=6):
                     if any(v in text_tokens for v in (word,)+_FILE_SYNONYMS.get(word,())):
                         hit.add(word)
         # Inventory includes filenames that never appear as source text.
+    knowledge_matches={}
+    if expansion_terms:
+        with closing(_connect(repo)) as conn:
+            knowledge_matches=discover_concept_paths(conn,expansion_terms)
     ranked=[]
     with closing(_connect(repo)) as conn:
         for (path,) in conn.execute('SELECT path FROM files'):
@@ -605,6 +617,7 @@ def search_file_candidates(repo, query, limit=6):
                 score+= (13 if rare else 1) + (
                     11 if rare and any(v in basename for v in variants) else 0)
             content_terms=source_matches.get(path,set())
+            kb_evidence=knowledge_matches.get(path)
             # Conservative KB path expansion, bounded so the original query
             # and actual source terms remain dominant. No benchmark paths.
             knowledge_path_matches=[term for term in knowledge_terms
@@ -616,8 +629,13 @@ def search_file_candidates(repo, query, limit=6):
             # implementation filenames.
             if content_terms:
                 score+=min(16,4*len(content_terms))
-            if not matched and not content_terms:
+            if not matched and not content_terms and not kb_evidence:
                 continue
+            if kb_evidence:
+                # Original query terms dominate. A KB-only path receives a
+                # modest score; corroboration by indexed symbol is stronger.
+                score+=min(12,4*len(kb_evidence['fts']))
+                score+=min(12,6*len(kb_evidence['symbols']))
             normalized=path.lower().replace('\\','/')
             if preferred:
                 if normalized.startswith(preferred+'/'):
@@ -667,9 +685,48 @@ def search_file_candidates(repo, query, limit=6):
                                'content_terms':sorted(content_terms),
                                'kind':'hybrid-file-candidate',
                                'file_role':kind,'citation':False,
-                               'knowledge_path_terms':knowledge_path_matches})
+                               'knowledge_path_terms':knowledge_path_matches,
+                               'kb_fts_terms':sorted(kb_evidence['fts']) if kb_evidence else [],
+                               'kb_symbol_terms':sorted(kb_evidence['symbols']) if kb_evidence else [],
+                               'graph_neighbors':[]})
     ranked.sort(key=lambda r:(-r['path_score'],-len(r['content_terms']),
                               len(r['path']),r['path']))
+    if strategy=='v59' and ranked:
+        # One-hop expansion of the strongest file leads (not the gold labels).
+        # Source graph edges may be heuristic; candidates remain citation=False.
+        seeds=[row['path'] for row in ranked[:12]]
+        with closing(_connect(repo)) as conn:
+            neighbor_links=related_source_paths(conn,seeds)
+            indexed_paths={row[0] for row in conn.execute('SELECT path FROM files')}
+        by_path={row['path']:row for row in ranked}
+        seed_scores={row['path']:row['path_score'] for row in ranked[:12]}
+        for path,parents in neighbor_links.items():
+            if path not in indexed_paths:
+                continue
+            base_score=max((seed_scores.get(parent,0) for parent in parents),default=0)
+            if base_score<=0:
+                continue
+            if path in by_path:
+                current=by_path[path]
+                current['path_score']+=min(7,3*len(parents))
+                current['graph_neighbors']=sorted(parents)
+                continue
+            normalized=path.lower().replace('\\','/')
+            kind=('test' if '/tests/' in normalized or normalized.startswith('tests/')
+                  else 'documentation' if normalized.endswith('.md')
+                  else 'sample' if '/samples/' in normalized
+                  else 'implementation' if '/src/' in normalized or '/packages/' in normalized
+                  else 'other')
+            row={'path':path,'path_score':max(8,min(18,int(base_score*0.35))),
+                 'match_terms':[],'content_terms':[],
+                 'kind':'hybrid-file-candidate','file_role':kind,
+                 'citation':False,'knowledge_path_terms':[],
+                 'kb_fts_terms':[],'kb_symbol_terms':[],
+                 'graph_neighbors':sorted(parents)}
+            ranked.append(row)
+            by_path[path]=row
+        ranked.sort(key=lambda r:(-r['path_score'],-len(r['content_terms']),
+                                  len(r['path']),r['path']))
     limit=max(1,min(50,int(limit)))
     # Different source folders within one .NET project may own different
     # workflow responsibilities (state, persistence, checkpoint manager).
