@@ -6,8 +6,9 @@ import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
+from language_registry import SOURCE_EXTENSIONS, is_source_file
 
-EXTENSIONS = {'.java', '.sql', '.as', '.mxml', '.xml', '.properties', '.jsp', '.jspx', '.xhtml', '.gradle', '.yaml', '.yml', '.json', '.md', '.txt', '.fxml', '.actionscript', '.hbm', '.conf', '.py', '.pyi', '.cs', '.csx'}
+EXTENSIONS = SOURCE_EXTENSIONS  # Legacy public alias; see language_registry.py
 EXCLUDE_DIRS = {'.git', '.svn', '.hg', '.idea', '.vscode', 'node_modules', 'target', 'build', 'dist', 'out', 'bin', '.gradle', '.settings', '__pycache__', '.venv', 'venv', 'coverage', '.next'}
 MAX_BYTES = 1_000_000
 MAX_FILES = 25000
@@ -32,7 +33,7 @@ class Repo:
         if Path(relpath).is_absolute() or PureWindowsPath(relpath).is_absolute() or ".." in PureWindowsPath(relpath).parts:
             raise ValueError("Only paths relative to the project are allowed")
         p = (self.root / relpath).resolve(strict=False)
-        if not p.is_relative_to(self.root) or not p.is_file() or p.suffix.lower() not in EXTENSIONS:
+        if not p.is_relative_to(self.root) or not p.is_file() or not is_source_file(p):
             raise ValueError('Path is not a permitted source file in the project')
         if p.stat().st_size > MAX_BYTES:
             raise ValueError('File is too large')
@@ -56,7 +57,7 @@ class Repo:
             dirs[:] = sorted(d for d in dirs if d not in EXCLUDE_DIRS and not (Path(base) / d).is_symlink())
             for name in sorted(filenames):
                 p = Path(base) / name
-                if p.is_symlink() or p.suffix.lower() not in EXTENSIONS:
+                if p.is_symlink() or not is_source_file(p):
                     continue
                 try:
                     if p.stat().st_size > MAX_BYTES:
