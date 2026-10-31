@@ -1,0 +1,272 @@
+{
+  "schema_version": 1,
+  "pack_id": "backend-cloud",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "concepts": [
+    {
+      "id": "api.rest",
+      "domain": "backend",
+      "label": "REST resources",
+      "description": "REST-style APIs organize operations around resource representations and HTTP semantics.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "REST resources",
+        "rest",
+        "rest api",
+        "resource endpoint"
+      ]
+    },
+    {
+      "id": "api.grpc",
+      "domain": "backend",
+      "label": "gRPC contracts",
+      "description": "gRPC generally uses Protocol Buffers service definitions for typed RPC interfaces.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "gRPC contracts",
+        "grpc",
+        "protobuf service",
+        "rpc method"
+      ]
+    },
+    {
+      "id": "api.openapi",
+      "domain": "backend",
+      "label": "OpenAPI specification",
+      "description": "OpenAPI describes HTTP API paths, parameters, operations, schemas, and responses.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "OpenAPI specification",
+        "openapi",
+        "swagger",
+        "api specification"
+      ]
+    },
+    {
+      "id": "api.idempotency",
+      "domain": "backend",
+      "label": "Idempotent operations",
+      "description": "Repeated calls should have the same intended effect as one call under an idempotent contract.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Idempotent operations",
+        "idempotency",
+        "idempotent",
+        "idempotency key"
+      ]
+    },
+    {
+      "id": "distributed.retry",
+      "domain": "backend",
+      "label": "Retry policy",
+      "description": "Retry logic requires backoff and bounded attempts, and must respect operation idempotency.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Retry policy",
+        "retry policy",
+        "exponential backoff",
+        "retry with jitter"
+      ]
+    },
+    {
+      "id": "distributed.circuitbreaker",
+      "domain": "backend",
+      "label": "Circuit breaker",
+      "description": "Circuit breakers stop repeatedly calling a dependency that is failing.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Circuit breaker",
+        "circuit breaker",
+        "open circuit",
+        "half-open"
+      ]
+    },
+    {
+      "id": "distributed.eventual",
+      "domain": "backend",
+      "label": "Eventual consistency",
+      "description": "Replicated state may converge after a delay rather than being immediately consistent.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Eventual consistency",
+        "eventual consistency",
+        "replication lag",
+        "read your writes"
+      ]
+    },
+    {
+      "id": "distributed.cqrs",
+      "domain": "backend",
+      "label": "CQRS",
+      "description": "Command Query Responsibility Segregation separates write-command and read-query responsibilities.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "CQRS",
+        "cqrs",
+        "command handler",
+        "query handler"
+      ]
+    },
+    {
+      "id": "distributed.eventsourcing",
+      "domain": "backend",
+      "label": "Event sourcing",
+      "description": "Event sourcing derives state from a log of recorded domain events.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Event sourcing",
+        "event sourcing",
+        "event store",
+        "event replay"
+      ]
+    },
+    {
+      "id": "distributed.saga",
+      "domain": "backend",
+      "label": "Saga transactions",
+      "description": "A saga coordinates multi-step operations through local transactions and compensating actions.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Saga transactions",
+        "saga",
+        "compensating action",
+        "distributed transaction"
+      ]
+    },
+    {
+      "id": "message.kafka",
+      "domain": "backend",
+      "label": "Kafka event streams",
+      "description": "Kafka organizes records by topics and partitions for ordered consumption within partitions.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Kafka event streams",
+        "kafka",
+        "consumer group",
+        "topic partition"
+      ]
+    },
+    {
+      "id": "cache.redis",
+      "domain": "backend",
+      "label": "Redis cache",
+      "description": "Redis can act as an in-memory key-value store and caching layer.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Redis cache",
+        "redis",
+        "cache ttl",
+        "key expiration"
+      ]
+    },
+    {
+      "id": "infra.kubernetes",
+      "domain": "backend",
+      "label": "Kubernetes workload",
+      "description": "Pods and controllers reconcile declarative desired state for container workloads.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Kubernetes workload",
+        "kubernetes",
+        "deployment yaml",
+        "pod",
+        "kubectl"
+      ]
+    },
+    {
+      "id": "infra.terraform",
+      "domain": "backend",
+      "label": "Terraform state",
+      "description": "Terraform tracks managed resources and desired configurations using providers and state.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Terraform state",
+        "terraform",
+        "terraform state",
+        "terraform plan"
+      ]
+    },
+    {
+      "id": "infra.docker",
+      "domain": "backend",
+      "label": "Docker container",
+      "description": "Container images package application files and runtime requirements for process isolation.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Docker container",
+        "dockerfile",
+        "docker image",
+        "container runtime"
+      ]
+    },
+    {
+      "id": "cloud.aws.iam",
+      "domain": "backend",
+      "label": "AWS IAM authorization",
+      "description": "IAM policies define allowed and denied actions on AWS resources for principals.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "AWS IAM authorization",
+        "aws iam",
+        "iam role",
+        "iam policy"
+      ]
+    },
+    {
+      "id": "cloud.aws.vpc",
+      "domain": "backend",
+      "label": "AWS VPC networking",
+      "description": "VPC subnets, routing and network controls define isolation and reachability.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "AWS VPC networking",
+        "aws vpc",
+        "subnet",
+        "security group"
+      ]
+    },
+    {
+      "id": "cloud.aws.lambda",
+      "domain": "backend",
+      "label": "AWS Lambda functions",
+      "description": "Lambda executes serverless function handlers triggered by requests or events.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "AWS Lambda functions",
+        "lambda handler",
+        "aws lambda",
+        "event source"
+      ]
+    },
+    {
+      "id": "observability.tracing",
+      "domain": "backend",
+      "label": "Distributed tracing",
+      "description": "Distributed traces follow requests across services with trace and span identifiers.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Distributed tracing",
+        "distributed tracing",
+        "otel",
+        "opentelemetry",
+        "trace id"
+      ]
+    },
+    {
+      "id": "observability.metrics",
+      "domain": "backend",
+      "label": "Service metrics",
+      "description": "Metrics record numerical operational measurements such as latency, errors, and traffic.",
+      "source": "https://docs.aws.amazon.com/",
+      "aliases": [
+        "Service metrics",
+        "prometheus",
+        "latency metric",
+        "slo",
+        "error budget"
+      ]
+    }
+  ],
+  "relations": []
+}
