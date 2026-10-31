@@ -58,6 +58,14 @@ Each case runs `agent.py --project <source> investigate "<question>" --out <benc
 
 The report contains exit success/failure, status, seconds, existence and validity of source references and, for RepoContextBench cases only, a **gold-span overlap proxy**. These metrics are not equivalent to a semantic correctness score.
 
+The runner now reports three **different retrieval stages** over the selected RepoContextBench gold files:
+
+- `candidate_file_recall_at_8`: proportion of gold files appearing in the deterministic top-eight filename candidates before Qwen spends a tool step. A filename match is **not** a citation.
+- `observed_file_recall` / `observed_span_recall`: overlap of validated source `file:line` references actually retained in tool observations.
+- `gold_file_recall_proxy` / `gold_span_recall_proxy`: overlap of the final validated investigation evidence exported to the machine JSON.
+
+Comparing these stages shows whether misses occur during file discovery, source inspection, or evidence selection. These are recall proxies against annotated evidence, **not answer correctness**. Old run results will not automatically acquire these new metrics until rescored or rerun.
+
 A `review_template.csv` is provided for manual answer correctness review. No unsupported automatic correctness grade is claimed. Memory use, token counts and actual LLM calls are not measured unless separately instrumented.
 
 Generated results live under `benchmark/results/<run-id>/` and are not committed.
