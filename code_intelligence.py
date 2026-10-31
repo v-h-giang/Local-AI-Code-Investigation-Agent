@@ -680,7 +680,7 @@ def search_file_candidates(repo, query, limit=6):
         for role,count in (('documentation',2),('sample',2),('test',1),('implementation',1)):
             matches=[r for r in ranked if r['file_role']==role]
             if role=='documentation':
-                matches.sort(key=lambda r:(not r['path'].lower().endswith('/readme.md'),-r['path_score']))
+                matches.sort(key=lambda r:(-r['path_score'],not r['path'].lower().endswith('/readme.md')))
             for row in matches:
                 if count<=0:break
                 if append(row):
