@@ -4,6 +4,26 @@
 
 **Language:** English · [Tiếng Việt](README-VN.md)
 
+## V5.9 — Knowledge-guided file discovery
+
+The ordinary `architecture` / `investigate` commands now use a two-pass,
+bounded source candidate search: original keyword/FTS5 lookup and a **separate**
+Knowledge Base synonym lookup against FTS5 and indexed symbols. Top source
+leads may add immediate neighbors from the existing static/heuristic graph.
+Every result remains a filename navigation hint until actual source lines
+are opened. A `baseline` retrieval strategy is retained for reproducible
+A/B comparisons; **benchmark gold labels are never fed into ranking**.
+
+To compare all 20 frozen RepoContextBench questions offline, without Ollama:
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\inspect_candidates.py --from-run universal_kb_offline_fresh_1 --suite repocontextbench --limit 20 --compare --summary-only
+```
+
+Review both micro recall @8/@20 **and regression case IDs** before spending
+GPU time. This change has not been proven more accurate until the A/B results
+are measured. See [Universal Knowledge guide](README_UNIVERSAL_KNOWLEDGE.md).
+
 ## Two main commands — automatic knowledge and indexing
 
 **No separate `knowledge`, `intelligence` or `technologies` command is required.**
