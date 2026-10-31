@@ -126,6 +126,14 @@ def _source_observation_window(value, question, max_chars):
     terms=set(re.findall(r'[a-z0-9_]{4,}',question.lower()))
     terms -= {'what','when','where','which','with','from','that','this','does',
               'have','into','about','using','would','should','could','your'}
+    equivalent={'parallel':('concurrent','concurrency'),
+                'concurrent':('parallel',),
+                'combine':('aggregate','merge'),
+                'resume':('checkpoint','restore'),
+                'resuming':('checkpoint','restore'),
+                'saved':('checkpoint','persistence'),
+                'yaml':('declarative',)}
+    terms.update(word for term in tuple(terms) for word in equivalent.get(term,()))
     anchor=max(range(len(numbered)),key=lambda i: (
         sum(3 for t in terms if t in numbered[i][1].lower()) +
         (2 if re.search(r'\b(?:def|class|function|return|public|private)\b',
