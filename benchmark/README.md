@@ -49,6 +49,30 @@ regressions at 8 and 20 files. Compare with baseline micro recall @8=0.2203
 and @20=0.3390 **only if the old index and 20 cases are the same**. Any source
 graph connections remain candidate-only and do not prove runtime execution.
 
+## Diagnose V5.9.1 without another AI benchmark
+
+When paired recall does not improve, identify **where** the missing gold
+files disappear. Run this against an existing frozen checkout and SQLite
+index; the tool never calls Ollama and never feeds gold file paths into the
+production retriever:
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\inspect_candidates.py `
+  --from-run universal_kb_offline_fresh_1 `
+  --suite repocontextbench `
+  --compare `
+  --diagnose `
+  --summary-only
+```
+
+The diagnostic output distinguishes missing indexed source, unmatched
+Knowledge Base concepts, no safe query aliases, no KB-discovered files,
+KB terms finding unrelated files, KB-discovered gold pushed below the top 20,
+and graph reachability. It also reports baseline and V5.9 ranks in a wider
+top-50 window. **Diagnostic categories are heuristic; they do not prove
+semantic answer correctness.** Keep a separate unseen repository set for
+verifying future ranking changes.
+
 ## Running
 
 From project root on Windows (PowerShell):
