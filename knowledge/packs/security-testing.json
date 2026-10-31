@@ -148,7 +148,7 @@
       ]
     },
     {
-      "id": "testing.unit",
+      "id": "testing.unit_isolation",
       "domain": "security",
       "label": "Unit test isolation",
       "description": "Unit tests focus on an isolated behavior using controlled inputs and dependencies.",
@@ -161,7 +161,7 @@
       ]
     },
     {
-      "id": "testing.integration",
+      "id": "testing.integration_validation",
       "domain": "security",
       "label": "Integration testing",
       "description": "Integration tests validate behavior across component boundaries and real integrations.",
