@@ -149,6 +149,43 @@ class KnowledgeRetrievalV59Test(unittest.TestCase):
                       {r['path'] for r in expanded})
         self.assertEqual(len({r['path'] for r in expanded}),len(expanded))
 
+    def test_v510_fusion_preserves_original_top8_and_find_new_sources(self):
+        # Independent fixture: a code concept with a synonym in the KB, plus
+        # plenty of plausible filename-only distractors.
+        for n in range(12):
+            (self.src/("retry_handler_%02d.py" % n)).write_text(
+                "def retry_operation():\n    return 1\n",encoding="utf-8")
+        (self.src/"background_tasks.py").write_text(
+            "def backoff_strategy():\n    return 2\n",encoding="utf-8")
+        repo=self._repo()
+        question="Where is retry handled?"
+        base=search_file_candidates(repo,question,limit=20,strategy="baseline")
+        v510=search_file_candidates(repo,question,limit=20,strategy="v510")
+        self.assertEqual([x["path"] for x in base[:8]],
+                         [x["path"] for x in v510[:8]])
+        self.assertIn("background_tasks.py",{x["path"] for x in v510})
+        self.assertTrue(all(x["citation"] is False for x in v510))
+        self.assertEqual(len(v510),len({x["path"] for x in v510}))
+
+    def test_v510_fusion_without_expansion_keeps_baseline(self):
+        (self.src/"unrelated.py").write_text(
+            "def tokenxyz():\n    return 1\n",encoding="utf-8")
+        repo=self._repo()
+        q="tokenxyz"
+        base=search_file_candidates(repo,q,limit=20,strategy="baseline")
+        experimental=search_file_candidates(repo,q,limit=20,strategy="v510")
+        self.assertEqual([x["path"] for x in experimental],
+                         [x["path"] for x in base])
+
+    def test_v510_default_still_v59_not_experimental(self):
+        (self.src/"retry_handler.py").write_text(
+            "def retry_handler():\n    return 1\n",encoding="utf-8")
+        repo=self._repo()
+        default=search_file_candidates(repo,"retry",limit=8)
+        v59=search_file_candidates(repo,"retry",limit=8,strategy="v59")
+        self.assertEqual([x["path"] for x in default],
+                         [x["path"] for x in v59])
+
     def test_reject_invalid_strategy(self):
         (self.src/"retry_handler.py").write_text(
             "def retry_handler():\n    return 1\n",encoding="utf-8")
