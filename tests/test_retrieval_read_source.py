@@ -109,6 +109,35 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertTrue(all('you' not in c['content_terms'] and
                             'their' not in c['content_terms'] for c in ranked))
 
+    def test_v52_distinct_sample_modules_are_not_collapsed(self):
+        # The prior three-directory bucket treated every 03-workflows example
+        # as one group and removed other relevant sample directories.
+        for folder in ('agents','functional','orchestrations'):
+            parent=self.root/'python'/'samples'/'03-workflows'/folder
+            parent.mkdir(parents=True)
+            (parent/'parallel_example.py').write_text(
+                'def parallel_example():\\n    return 1\\n',encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name)/'output',verbose=False)
+        results=search_file_candidates(
+            self.repo,'How to run parallel agents in a workflow?',limit=8)
+        folders={item['path'].rsplit('/',1)[0] for item in results}
+        self.assertIn('python/samples/03-workflows/agents',folders)
+        self.assertIn('python/samples/03-workflows/functional',folders)
+        self.assertIn('python/samples/03-workflows/orchestrations',folders)
+
+    def test_v52_documentation_question_can_return_readme(self):
+        parent=self.root/'declarative-agents'/'workflow-samples'
+        parent.mkdir(parents=True)
+        (parent/'README.md').write_text(
+            'Declarative workflow YAML examples can be loaded and executed.\\n',
+            encoding='utf-8')
+        build_intelligence(self.repo,Path(self.temp.name)/'output',verbose=False)
+        results=search_file_candidates(
+            self.repo,'Are declarative workflow YAML files only documentation '
+                      'examples or can they be loaded and executed?',limit=8)
+        self.assertIn('declarative-agents/workflow-samples/README.md',
+                      {item['path'] for item in results})
+
     def test_v5_dotnet_checkpoint_keeps_implementation(self):
         (self.root / 'dotnet' / 'src').mkdir(parents=True)
         (self.root / 'python' / 'samples').mkdir(parents=True)
