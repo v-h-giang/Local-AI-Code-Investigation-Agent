@@ -4,6 +4,25 @@
 
 **Language:** English · [Tiếng Việt](README-VN.md)
 
+## Two main commands — automatic knowledge and indexing
+
+**No separate `knowledge`, `intelligence` or `technologies` command is required.**
+Both `architecture` and `investigate` now automatically update the offline
+global programming KB, create or incrementally refresh the repository-specific
+SQLite intelligence index, and detect source languages/modules. Results are
+saved in `OUTPUT/middle-files/source_context.json`. Knowledge hints never
+become source citations. Repeated commands reuse the existing index when
+source metadata is unchanged; the `architecture` question generator also
+reuses the index prepared during the same invocation.
+
+```powershell
+.\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" architecture --out "D:\SourceAnalysis"
+.\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" investigate "Where is the Fortran solver?" --out "D:\SourceAnalysis"
+```
+
+Knowledge/technology commands remain optional diagnostics and pack-management
+tools. Ordinary `architecture` stays fully offline without model inference.
+
 ## Universal Code Knowledge Base (V5.4–V5.8 foundation)
 
 The agent now has a multi-language file registry, optional Tree-sitter and
