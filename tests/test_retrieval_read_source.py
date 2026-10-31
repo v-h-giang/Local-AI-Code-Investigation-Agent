@@ -116,7 +116,7 @@ class SourceRetrievalTests(unittest.TestCase):
             parent=self.root/'python'/'samples'/'03-workflows'/folder
             parent.mkdir(parents=True)
             (parent/'parallel_example.py').write_text(
-                'def parallel_example():\\n    return 1\\n',encoding='utf-8')
+                'def parallel_example():\n    return 1\n',encoding='utf-8')
         build_intelligence(self.repo,Path(self.temp.name)/'output',verbose=False)
         results=search_file_candidates(
             self.repo,'How to run parallel agents in a workflow?',limit=8)
@@ -129,7 +129,7 @@ class SourceRetrievalTests(unittest.TestCase):
         parent=self.root/'declarative-agents'/'workflow-samples'
         parent.mkdir(parents=True)
         (parent/'README.md').write_text(
-            'Declarative workflow YAML examples can be loaded and executed.\\n',
+            'Declarative workflow YAML examples can be loaded and executed.\n',
             encoding='utf-8')
         build_intelligence(self.repo,Path(self.temp.name)/'output',verbose=False)
         results=search_file_candidates(
