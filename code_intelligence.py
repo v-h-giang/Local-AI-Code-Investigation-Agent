@@ -484,7 +484,8 @@ def search_file_locations(repo, path, query, limit=8):
 # File discovery is separate from line citations: filenames are navigational
 # candidates, not proof that a statement appears at a particular source line.
 _FILE_SYNONYMS = {
-    'parallel': ('concurrent', 'concurrency', 'fanout', 'pipeline'),
+    # A pipeline may be sequential; never treat it as a synonym of parallel.
+    'parallel': ('concurrent', 'concurrency', 'fanout'),
     'concurrent': ('parallel', 'concurrency'),
     'combine': ('aggregate', 'aggregation', 'aggregator', 'fanin'),
     'combining': ('aggregate', 'aggregation', 'aggregator', 'fanin'),
@@ -606,8 +607,16 @@ def search_file_candidates(repo, query, limit=6):
                 score-=4
             if '/samples/' in normalized and normalized.endswith(('.py','.cs')):
                 score+=6
+            docs_requested=bool(re.search(
+                r'(?i)\b(?:documentation|documented|readme|examples?|guides?)\b',
+                query))
             if normalized.endswith(('.md','.yml','.yaml')):
-                score-=8
+                if docs_requested and normalized.endswith('.md'):
+                    # For questions explicitly comparing docs with working code,
+                    # README files are useful navigation candidates.
+                    score+=10
+                else:
+                    score-=8
             if '/src/' in normalized or '/packages/' in normalized:
                 score+=6
             # Semantic directory signals: concurrent/parallel work is likely
@@ -622,10 +631,10 @@ def search_file_candidates(repo, query, limit=6):
             if not any(w not in _FILE_COMMON for w in matched) and not content_terms:
                 score-=5
             if score>0:
-                kind=('implementation' if '/src/' in normalized or '/packages/' in normalized
-                      else 'test' if '/tests/' in normalized
-                      else 'sample' if '/samples/' in normalized
+                kind=('test' if '/tests/' in normalized or normalized.startswith('tests/')
                       else 'documentation' if normalized.endswith('.md')
+                      else 'sample' if '/samples/' in normalized
+                      else 'implementation' if '/src/' in normalized or '/packages/' in normalized
                       else 'other')
                 ranked.append({'path':path,'path_score':score,'match_terms':matched,
                                'content_terms':sorted(content_terms),
@@ -637,9 +646,12 @@ def search_file_candidates(repo, query, limit=6):
     # First pass: diversify modules/roles; second pass: fill by global rank.
     result=[];chosen=set();by_bucket={}
     for row in ranked:
-        parts=row['path'].split('/')
-        bucket=('/'.join(parts[:3]) if len(parts)>=3 else parts[0],
-                row['file_role'])
+        # Distinguish actual package/sample directories. The old first-three
+        # path segments collapsed ALL python/samples/03-workflows examples into
+        # one bucket and all dotnet/src/Workflows implementations into another.
+        # That discarded correct files even when their raw score was high.
+        folder=row['path'].rsplit('/',1)[0] if '/' in row['path'] else '.'
+        bucket=(folder,row['file_role'])
         if by_bucket.get(bucket,0)>=2:
             continue
         result.append(row);chosen.add(row['path'])
