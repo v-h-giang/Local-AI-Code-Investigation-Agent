@@ -44,6 +44,14 @@ py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --res
 py -3 benchmark/run.py --suite all --mode ai --fetch-repos --run-id qwen30 --resume --retry-failed
 ```
 
+Before spending GPU time, use an *existing* V4 benchmark index to evaluate V5 candidate ranking offline without calling Ollama:
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\inspect_candidates.py --from-run retrieval_v4_smoke --suite repocontextbench --case-id repo_context_bench_agent_framework_practical_0001 --case-id repo_context_bench_agent_framework_practical_0011 --case-id repo_context_bench_agent_framework_practical_0018
+```
+
+This diagnostics-only script checks that the frozen repository and its already-prepared SQLite index exist. It reports candidate file recall @8 and @20 using gold labels **only for evaluation**, not ranking. If the old run/checkout is unavailable, run a new benchmark setup to prepare the index.
+
 Targeted three-question regression (new run ID, no need to process all 30 questions):
 
 ```powershell
