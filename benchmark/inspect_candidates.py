@@ -193,6 +193,8 @@ def main(argv=None):
                         default='repocontextbench')
     parser.add_argument('--case-id',action='append',default=[])
     parser.add_argument('--limit',type=int,default=20)
+    parser.add_argument('--fusion',action='store_true',
+                        help='Evaluate experimental V5.10 fusion on the SAME frozen index')
     parser.add_argument('--diagnose',action='store_true',
                         help='Audit why KB, symbol or graph discovery missed gold (offline)')
     parser.add_argument('--compare',action='store_true',
@@ -227,7 +229,7 @@ def main(argv=None):
     aggregate=summarize_candidate_results(results)
     report={'suite':suite,'run_id':run_id,'strategy':'v59','summary':aggregate}
     baseline_ranked=[]
-    if args.compare or args.diagnose:
+    if args.compare or args.diagnose or args.fusion:
         baseline_ranked=[search_file_candidates(
             repo,case['question'],limit=ranked_limit,strategy='baseline')
             for case in selected]
@@ -238,6 +240,24 @@ def main(argv=None):
         report['comparison']=compare_candidate_results(baseline,results)
         if not args.summary_only:
             report['baseline_cases']=baseline
+    if args.fusion:
+        # Opt-in offline comparison. Gold labels are scored only after
+        # retrieval, never provided to the experimental ranker.
+        fusion_ranked=[search_file_candidates(
+            repo,case['question'],limit=ranked_limit,strategy='v510')
+            for case in selected]
+        fusion_cases=[evaluate_case(repo,case,limit=args.limit,ranked=ranked)
+                      for case,ranked in zip(selected,fusion_ranked)]
+        baseline_cases=[evaluate_case(repo,case,strategy='baseline',
+                        limit=args.limit,ranked=ranked)
+                        for case,ranked in zip(selected,baseline_ranked)]
+        report['fusion_experiment']={
+            'strategy':'v510',
+            'comparison_vs_baseline':compare_candidate_results(
+                baseline_cases,fusion_cases)
+        }
+        if not args.summary_only:
+            report['fusion_experiment']['cases']=fusion_cases
     if args.diagnose:
         details=[diagnose_case(repo,case,base,variant)
                  for case,base,variant in zip(
