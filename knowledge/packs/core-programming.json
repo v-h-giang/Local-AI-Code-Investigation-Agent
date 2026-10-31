@@ -1,0 +1,497 @@
+{
+  "schema_version": 1,
+  "pack_id": "core-programming",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "concepts": [
+    {
+      "id": "concurrency.parallel",
+      "domain": "systems",
+      "label": "parallel execution",
+      "aliases": [
+        "parallel execution",
+        "parallel",
+        "concurrent",
+        "concurrency",
+        "fan out",
+        "fan-out"
+      ],
+      "description": "Concept: parallel execution. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "concurrency.fanin",
+      "domain": "systems",
+      "label": "fan-in aggregation",
+      "aliases": [
+        "fan-in aggregation",
+        "fan in",
+        "fan-in",
+        "aggregator",
+        "aggregate results",
+        "combine results"
+      ],
+      "description": "Concept: fan-in aggregation. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "concurrency.async",
+      "domain": "systems",
+      "label": "asynchronous execution",
+      "aliases": [
+        "asynchronous execution",
+        "async",
+        "await",
+        "asynchronous",
+        "event loop"
+      ],
+      "description": "Concept: asynchronous execution. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "workflow.checkpoint",
+      "domain": "architecture",
+      "label": "workflow checkpoint",
+      "aliases": [
+        "workflow checkpoint",
+        "checkpoint",
+        "checkpointing",
+        "resume",
+        "resuming",
+        "save state",
+        "restore state"
+      ],
+      "description": "Concept: workflow checkpoint. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "workflow.persistence",
+      "domain": "architecture",
+      "label": "state persistence",
+      "aliases": [
+        "state persistence",
+        "persist state",
+        "state persistence",
+        "durable state",
+        "state recovery"
+      ],
+      "description": "Concept: state persistence. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "workflow.executor",
+      "domain": "architecture",
+      "label": "workflow executor",
+      "aliases": [
+        "workflow executor",
+        "executor",
+        "execution engine",
+        "step runner"
+      ],
+      "description": "Concept: workflow executor. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "workflow.declarative",
+      "domain": "architecture",
+      "label": "declarative workflow",
+      "aliases": [
+        "declarative workflow",
+        "declarative workflow",
+        "workflow yaml",
+        "yaml workflow",
+        "workflow definition"
+      ],
+      "description": "Concept: declarative workflow. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "workflow.runtime",
+      "domain": "architecture",
+      "label": "workflow execution",
+      "aliases": [
+        "workflow execution",
+        "execute workflow",
+        "run workflow",
+        "load workflow",
+        "workflow factory"
+      ],
+      "description": "Concept: workflow execution. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "api.routing",
+      "domain": "backend",
+      "label": "HTTP route handler",
+      "aliases": [
+        "HTTP route handler",
+        "endpoint",
+        "route",
+        "controller",
+        "request mapping",
+        "http handler"
+      ],
+      "description": "Concept: HTTP route handler. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "api.authorization",
+      "domain": "security",
+      "label": "authorization",
+      "aliases": [
+        "authorization",
+        "authorization",
+        "permission check",
+        "access control",
+        "rbac",
+        "policy enforcement"
+      ],
+      "description": "Concept: authorization. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "api.authentication",
+      "domain": "security",
+      "label": "authentication",
+      "aliases": [
+        "authentication",
+        "authentication",
+        "login",
+        "identity verification",
+        "jwt"
+      ],
+      "description": "Concept: authentication. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "database.transaction",
+      "domain": "database",
+      "label": "database transaction",
+      "aliases": [
+        "database transaction",
+        "transaction",
+        "commit",
+        "rollback",
+        "atomicity",
+        "acid"
+      ],
+      "description": "Concept: database transaction. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "database.migration",
+      "domain": "database",
+      "label": "schema migration",
+      "aliases": [
+        "schema migration",
+        "database migration",
+        "schema migration",
+        "ddl migration",
+        "alembic"
+      ],
+      "description": "Concept: schema migration. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "database.query",
+      "domain": "database",
+      "label": "SQL query",
+      "aliases": [
+        "SQL query",
+        "sql query",
+        "query execution",
+        "select statement",
+        "database query"
+      ],
+      "description": "Concept: SQL query. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "compiler.module",
+      "domain": "language",
+      "label": "module declaration",
+      "aliases": [
+        "module declaration",
+        "fortran module",
+        "module declaration",
+        "import module",
+        "use statement"
+      ],
+      "description": "Concept: module declaration. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "compiler.callgraph",
+      "domain": "analysis",
+      "label": "function call graph",
+      "aliases": [
+        "function call graph",
+        "call graph",
+        "caller",
+        "callee",
+        "call sites",
+        "invocation graph"
+      ],
+      "description": "Concept: function call graph. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "compiler.dataflow",
+      "domain": "analysis",
+      "label": "data flow analysis",
+      "aliases": [
+        "data flow analysis",
+        "dataflow",
+        "data flow",
+        "taint analysis",
+        "reaching definitions"
+      ],
+      "description": "Concept: data flow analysis. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "compiler.symbol",
+      "domain": "analysis",
+      "label": "symbol definition and references",
+      "aliases": [
+        "symbol definition and references",
+        "symbol lookup",
+        "find references",
+        "go to definition",
+        "method declaration"
+      ],
+      "description": "Concept: symbol definition and references. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "hpc.parallel",
+      "domain": "hpc",
+      "label": "parallel computing",
+      "aliases": [
+        "parallel computing",
+        "openmp",
+        "mpi",
+        "parallel region",
+        "thread team",
+        "coarray"
+      ],
+      "description": "Concept: parallel computing. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "hpc.gpu",
+      "domain": "hpc",
+      "label": "GPU computing",
+      "aliases": [
+        "GPU computing",
+        "cuda",
+        "opencl",
+        "gpu kernel",
+        "device memory",
+        "vulkan compute"
+      ],
+      "description": "Concept: GPU computing. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "infra.deploy",
+      "domain": "devops",
+      "label": "software deployment",
+      "aliases": [
+        "software deployment",
+        "deploy",
+        "deployment",
+        "release pipeline",
+        "rollout"
+      ],
+      "description": "Concept: software deployment. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "infra.container",
+      "domain": "devops",
+      "label": "containerized runtime",
+      "aliases": [
+        "containerized runtime",
+        "docker",
+        "container",
+        "containerfile",
+        "dockerfile"
+      ],
+      "description": "Concept: containerized runtime. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "infra.iac",
+      "domain": "devops",
+      "label": "infrastructure as code",
+      "aliases": [
+        "infrastructure as code",
+        "terraform",
+        "cloudformation",
+        "iac",
+        "infrastructure as code"
+      ],
+      "description": "Concept: infrastructure as code. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "testing.integration",
+      "domain": "testing",
+      "label": "integration test",
+      "aliases": [
+        "integration test",
+        "integration test",
+        "integration testing",
+        "end to end test",
+        "e2e"
+      ],
+      "description": "Concept: integration test. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "testing.unit",
+      "domain": "testing",
+      "label": "unit test",
+      "aliases": [
+        "unit test",
+        "unit testing",
+        "mock",
+        "test fixture",
+        "assertion"
+      ],
+      "description": "Concept: unit test. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "testing.contract",
+      "domain": "testing",
+      "label": "API contract testing",
+      "aliases": [
+        "API contract testing",
+        "contract test",
+        "request response mapping",
+        "api validation"
+      ],
+      "description": "Concept: API contract testing. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "frontend.state",
+      "domain": "frontend",
+      "label": "client state management",
+      "aliases": [
+        "client state management",
+        "state management",
+        "redux",
+        "reactivity",
+        "observable state"
+      ],
+      "description": "Concept: client state management. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "frontend.render",
+      "domain": "frontend",
+      "label": "UI rendering",
+      "aliases": [
+        "UI rendering",
+        "rendering",
+        "component render",
+        "hydration",
+        "virtual dom"
+      ],
+      "description": "Concept: UI rendering. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "ml.inference",
+      "domain": "ml",
+      "label": "model inference",
+      "aliases": [
+        "model inference",
+        "inference",
+        "model serving",
+        "predict",
+        "forward pass"
+      ],
+      "description": "Concept: model inference. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "ml.training",
+      "domain": "ml",
+      "label": "model training",
+      "aliases": [
+        "model training",
+        "training loop",
+        "backpropagation",
+        "gradient",
+        "optimizer"
+      ],
+      "description": "Concept: model training. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    },
+    {
+      "id": "security.injection",
+      "domain": "security",
+      "label": "injection vulnerability",
+      "aliases": [
+        "injection vulnerability",
+        "sql injection",
+        "command injection",
+        "untrusted input",
+        "parameterized query"
+      ],
+      "description": "Concept: injection vulnerability. Use only as a navigation hint; inspect repository source before claiming behavior.",
+      "source": "builtin-curated"
+    }
+  ],
+  "relations": [
+    {
+      "from": "concurrency.parallel",
+      "to": "concurrency.fanin",
+      "kind": "related"
+    },
+    {
+      "from": "workflow.checkpoint",
+      "to": "workflow.persistence",
+      "kind": "related"
+    },
+    {
+      "from": "workflow.checkpoint",
+      "to": "workflow.executor",
+      "kind": "related"
+    },
+    {
+      "from": "workflow.declarative",
+      "to": "workflow.runtime",
+      "kind": "related"
+    },
+    {
+      "from": "database.transaction",
+      "to": "database.query",
+      "kind": "related"
+    },
+    {
+      "from": "compiler.callgraph",
+      "to": "compiler.symbol",
+      "kind": "related"
+    },
+    {
+      "from": "hpc.parallel",
+      "to": "concurrency.parallel",
+      "kind": "related"
+    },
+    {
+      "from": "api.authentication",
+      "to": "api.authorization",
+      "kind": "related"
+    },
+    {
+      "from": "testing.integration",
+      "to": "testing.contract",
+      "kind": "related"
+    }
+  ]
+}
