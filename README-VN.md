@@ -1,5 +1,7 @@
 # Local AI Code Investigation Agent
 
+> **Quy trình chính:** Chỉ cần dùng `architecture` hoặc `investigate`. Cả hai tự cập nhật Knowledge Base offline, index mã nguồn SQLite và thống kê công nghệ. Kết quả ở `OUT/middle-files/source_context.json`; các lệnh `knowledge`, `intelligence`, `technologies` chỉ dành cho kiểm tra nâng cao.
+
 **v4.17 · Phân tích codebase bằng AI cục bộ · Python + Ollama · Windows / VS Code · Chỉ đọc source**
 
 **Ngôn ngữ:** [English](README.md) · Tiếng Việt
