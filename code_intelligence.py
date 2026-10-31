@@ -506,6 +506,8 @@ _FILE_COMMON = _SEARCH_STOPWORDS | {
     'response', 'responses', 'answer', 'answers', 'combine', 'combining',
     'their', 'you', 'your', 'would', 'several', 'same', 'then', 'what',
     'needed', 'point', 'how', 'only', 'code', 'files',
+    'run', 'one', 'into', 'specialist', 'specialists', 'some',
+    'several', 'another', 'then', 'these', 'those', 'there',
 }
 
 
@@ -540,9 +542,13 @@ def search_file_candidates(repo, query, limit=6):
     # Rare, domain-specific tokens contribute much more than generic tokens.
     informative=[w for w in words if w not in _FILE_COMMON]
     vocabulary=[]
-    for word in informative+words:
+    # FTS must not OR high-frequency conversational words into a query:
+    # they swamp SQLite's bounded result set with unrelated documents.
+    # Fall back to a few common terms only if the question has no domain term.
+    fts_terms=informative if informative else words[:4]
+    for word in fts_terms:
         for token in (word,)+_FILE_SYNONYMS.get(word,()):
-            if token not in vocabulary and len(vocabulary)<32:
+            if token not in vocabulary and len(vocabulary)<24:
                 vocabulary.append(token)
     source_matches={}
     if vocabulary:
