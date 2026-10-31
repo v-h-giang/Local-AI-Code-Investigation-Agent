@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "pack_id": "data-frontend-ai",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "concepts": [
+    {
+      "id": "sql.index",
+      "domain": "data",
+      "label": "SQL index",
+      "description": "Indexes can accelerate selected access patterns but add storage and write maintenance cost.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "SQL index",
+        "btree index",
+        "hash index",
+        "create index"
+      ]
+    },
+    {
+      "id": "sql.plan",
+      "domain": "data",
+      "label": "SQL query plan",
+      "description": "Execution plans describe chosen scans, joins and data-access operations.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "SQL query plan",
+        "explain analyze",
+        "query plan",
+        "execution plan"
+      ]
+    },
+    {
+      "id": "sql.isolation",
+      "domain": "data",
+      "label": "Transaction isolation",
+      "description": "Isolation levels constrain how transactions observe concurrent changes.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Transaction isolation",
+        "read committed",
+        "repeatable read",
+        "serializable"
+      ]
+    },
+    {
+      "id": "sql.lock",
+      "domain": "data",
+      "label": "Database locking",
+      "description": "Locks coordinate concurrent operations over database rows, tables or metadata.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Database locking",
+        "row lock",
+        "select for update",
+        "deadlock detected"
+      ]
+    },
+    {
+      "id": "sql.orm",
+      "domain": "data",
+      "label": "Object relational mapping",
+      "description": "ORMs translate object-level queries and associations to database operations.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Object relational mapping",
+        "orm",
+        "entity framework",
+        "hibernate",
+        "sqlalchemy"
+      ]
+    },
+    {
+      "id": "data.etl",
+      "domain": "data",
+      "label": "ETL pipeline",
+      "description": "Extract-transform-load pipelines move and transform data between systems.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "ETL pipeline",
+        "etl",
+        "data pipeline",
+        "data warehouse"
+      ]
+    },
+    {
+      "id": "data.schema",
+      "domain": "data",
+      "label": "Schema migration",
+      "description": "Database migrations change persisted schemas with controlled rollout and compatibility.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Schema migration",
+        "migration script",
+        "alter table",
+        "schema version"
+      ]
+    },
+    {
+      "id": "frontend.dom",
+      "domain": "data",
+      "label": "Document Object Model",
+      "description": "The DOM represents document nodes and provides APIs to inspect or change them.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Document Object Model",
+        "dom",
+        "document.querySelector",
+        "dom tree"
+      ]
+    },
+    {
+      "id": "frontend.reactivity",
+      "domain": "data",
+      "label": "Reactive state updates",
+      "description": "Reactive frameworks propagate state changes to dependent computations or views.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Reactive state updates",
+        "reactivity",
+        "computed property",
+        "observable state"
+      ]
+    },
+    {
+      "id": "frontend.hydration",
+      "domain": "data",
+      "label": "Client hydration",
+      "description": "Hydration attaches interactive runtime behavior to pre-rendered HTML output.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Client hydration",
+        "hydration",
+        "server side rendering",
+        "ssr"
+      ]
+    },
+    {
+      "id": "frontend.spa",
+      "domain": "data",
+      "label": "Single-page application",
+      "description": "An SPA updates content through client-side navigation without full page reloads.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Single-page application",
+        "spa",
+        "client routing",
+        "history api"
+      ]
+    },
+    {
+      "id": "frontend.websocket",
+      "domain": "data",
+      "label": "WebSocket communication",
+      "description": "WebSockets provide bidirectional connections after a protocol handshake.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "WebSocket communication",
+        "websocket",
+        "ws connection",
+        "socket message"
+      ]
+    },
+    {
+      "id": "frontend.graphql",
+      "domain": "data",
+      "label": "GraphQL schema",
+      "description": "GraphQL schemas define types, operations and fields for graph-oriented APIs.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "GraphQL schema",
+        "graphql",
+        "graphql resolver",
+        "schema query"
+      ]
+    },
+    {
+      "id": "ml.training",
+      "domain": "data",
+      "label": "Model training",
+      "description": "Training adjusts model parameters to optimize a loss over training data.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Model training",
+        "training loop",
+        "optimizer step",
+        "backprop"
+      ]
+    },
+    {
+      "id": "ml.inference",
+      "domain": "data",
+      "label": "Model inference",
+      "description": "Inference applies learned parameters to inputs to produce outputs.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Model inference",
+        "inference pipeline",
+        "predict",
+        "model serving"
+      ]
+    },
+    {
+      "id": "ml.finetune",
+      "domain": "data",
+      "label": "Fine-tuning",
+      "description": "Fine-tuning adapts pretrained model parameters or adapters to a downstream task.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Fine-tuning",
+        "fine tuning",
+        "lora",
+        "peft"
+      ]
+    },
+    {
+      "id": "ml.embedding",
+      "domain": "data",
+      "label": "Vector embeddings",
+      "description": "Embeddings encode inputs into numeric vectors useful for similarity matching.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Vector embeddings",
+        "embedding model",
+        "vector similarity",
+        "cosine similarity"
+      ]
+    },
+    {
+      "id": "ml.rag",
+      "domain": "data",
+      "label": "Retrieval-augmented generation",
+      "description": "RAG supplies retrieved material as grounding context for a generative model.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Retrieval-augmented generation",
+        "rag pipeline",
+        "retrieval augmented generation",
+        "context retrieval"
+      ]
+    },
+    {
+      "id": "ml.onnx",
+      "domain": "data",
+      "label": "ONNX model format",
+      "description": "ONNX represents computation graphs for interoperability across supported runtimes.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "ONNX model format",
+        "onnx",
+        "onnx runtime",
+        "model export"
+      ]
+    },
+    {
+      "id": "ml.quantization",
+      "domain": "data",
+      "label": "Model quantization",
+      "description": "Quantization uses reduced numeric precision to reduce storage or computation cost.",
+      "source": "https://www.postgresql.org/docs/current/",
+      "aliases": [
+        "Model quantization",
+        "quantization",
+        "int8 model",
+        "gguf",
+        "4 bit"
+      ]
+    }
+  ],
+  "relations": []
+}
