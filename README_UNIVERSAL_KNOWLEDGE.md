@@ -43,6 +43,24 @@ Question
 
 All indexing and pack loading are offline and read-only **with respect to the user's project files**. SQLite index/output files are deliberately written outside the project source tree when the user selects an external output directory. No source code from the inspected repository is executed.
 
+## Recommended everyday workflow
+
+The two ordinary commands are `architecture` and `investigate`. Each
+automatically invokes knowledge pack refresh, incremental source intelligence,
+and technology/module detection. The combined machine-readable status lives
+under `OUTPUT/middle-files/source_context.json`; no separate initial
+`knowledge build`, `intelligence`, or `technologies` invocation is needed.
+KB concepts are navigation hints, never citations. Failure to write the
+optional global KB does not prevent ordinary source indexing.
+
+```powershell
+.\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" architecture --out "D:\SourceAnalysis"
+.\.venv\Scripts\python.exe agent.py --project "D:\SourceProject" investigate "Where is the Fortran solver?" --out "D:\SourceAnalysis"
+```
+
+The additional `knowledge`, `intelligence` and `technologies` commands below
+are optional diagnostics or custom-pack management tools.
+
 ## 3. Cài đặt
 
 In Windows PowerShell:
