@@ -19,6 +19,11 @@ def main(argv=None):
     p.add_argument('--num-ctx', type=int, default=2048, help='Ollama context tokens (default 2048, suitable for limited RAM)')
     p.add_argument('--timeout', type=int, default=240, help='HTTP response timeout in seconds (default 240)')
     sub = p.add_subparsers(dest='command', required=True)
+    kb = sub.add_parser('knowledge',help='Manage offline global programming knowledge base')
+    kb.add_argument('operation',choices=('build','query','status'))
+    kb.add_argument('question',nargs='?',default='')
+    kb.add_argument('--kb-path',default=None,help='Optional SQLite knowledge DB location')
+    kb.add_argument('--pack-dir',default=None,help='Local JSON pack directory for build')
     d = sub.add_parser('doctor', help='Verify Ollama and report source summary')
     d.add_argument('--probe', action='store_true', help='Actually load model and generate a tiny reply')
     sub.add_parser('index', help='Rebuild local SQLite FTS search index')
@@ -127,6 +132,19 @@ def main(argv=None):
         report_session.restore()
     print_ram_status()
     try:
+        if a.command=='knowledge':
+            from knowledge_base import build_knowledge, query_knowledge, knowledge_status
+            if a.operation=='build':
+                result=build_knowledge(db_path=a.kb_path,pack_dir=a.pack_dir)
+            elif a.operation=='query':
+                if not a.question.strip():
+                    raise ValueError('knowledge query requires a question')
+                result={'question':a.question,'concepts':query_knowledge(
+                    a.question,db_path=a.kb_path)}
+            else:
+                result=knowledge_status(db_path=a.kb_path)
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+            return 0
         if a.command in ('architecture','investigate','synthesize') and not 1 <= a.max_llm_calls <= 5000:
             raise ValueError('--max-llm-calls must be 1..5000')
         if a.command=='architecture' and a.ai_suggestions and a.no_ai_suggestions:
