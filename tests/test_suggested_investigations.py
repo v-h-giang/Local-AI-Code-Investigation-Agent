@@ -69,7 +69,7 @@ public class OrderController { public void submitOrder() { } }
                 self.assertEqual(main(['--project',str(src),'architecture','--auto-investigate-top','2','--non-synthesize',
                                        '--out',str(root/'out')]),0)
             self.assertEqual(run.call_count,2)
-            self.assertEqual(json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text())['executed'],2)
+            self.assertEqual(json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text(encoding='utf-8'))['executed'],2)
             self.assertTrue((root/'out'/'middle-files'/'investigations'/'INV-002.json').exists())
             self.assertTrue((root/'out'/'investigations'/'INV-002'/'result.html').exists())
             self.assertTrue((root/'out'/'investigations'/'INV-002'/'investigation.drawio').exists())
@@ -82,7 +82,7 @@ public class OrderController { public void submitOrder() { } }
                  redirect_stdout(io.StringIO()):
                 self.assertEqual(main(['--project',str(src),'architecture','--auto-investigate-top','1',
                                        '--out',str(root/'out')]),2)
-            manifest=json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text())
+            manifest=json.loads((root/'out'/'middle-files'/'investigations'/'manifest.json').read_text(encoding='utf-8'))
             self.assertEqual(manifest['successful'],0)
             self.assertEqual(manifest['results'][0]['status'],'failed')
 
