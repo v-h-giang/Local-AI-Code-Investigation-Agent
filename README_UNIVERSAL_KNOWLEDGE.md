@@ -163,6 +163,41 @@ LSP line numbers are zero-based; the repository index uses one-based line number
 
 The bridge never launches an LSP server or executes inspected code; it is an opt-in adapter for information obtained separately. A future LSP client would need explicit trust boundaries and versioned server capabilities.
 
+## V5.11 — AI understands concepts; SQLite verifies source
+
+For the normal **AI-enabled `investigate`** command, the existing Qwen JSON
+planning request now also receives a bounded local Knowledge Base glossary
+and the repository's indexed programming-language profile. This does not
+introduce a second planner call, a new model, cloud services, or web access.
+
+The pipeline now makes the separation explicit:
+
+1. **KB context preparation**: select relevant concepts by approximate
+   word overlap; if nothing matches, use a small domain-diverse catalog. The
+   prompt includes the project language profile but never assumes a framework
+   is used merely from a concept match.
+2. **Qwen intent interpretation**: existing Qwen call produces up to four
+   short lexical searches, up to eight candidate symbol names, intent and
+   investigation goals. Qwen may infer technical concepts beyond the KB.
+3. **Bounded query execution**: Python validates the JSON and queries SQLite
+   using parameterized SQL. At most two AI-proposed search phrases produce
+   up to four **secondary file candidates**, without displacing the original
+   top eight candidates.
+4. **Source checking**: `read_source`, FTS5 and symbol/graph tools inspect
+   actual repository files. A KB concept, filename, or AI guess is never a
+   source citation. Models cannot run project code or shell commands.
+
+If Qwen returns invalid JSON, the previous lexical fallback remains
+available. With `--non-ai` there is **no semantic model invocation**.
+The extra deterministic file-discovery requests can increase SQLite workload
+even though the AI planning call count stays unchanged.
+
+This is an architecture change, **not proof of higher recall**. The offline
+`inspect_candidates.py` comparisons only measure deterministic file
+retrieval. To assess this change, use the AI benchmark with the same pinned
+cases, model, token/call budgets and read-source citation metrics. Evaluate
+an unseen set to check generalization.
+
 ## V5.9 — Two-pass concept retrieval
 
 A query now follows two independent paths:
