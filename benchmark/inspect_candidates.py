@@ -6,6 +6,10 @@ Gold labels here are used solely to calculate diagnostics after retrieval.
 import argparse
 import json
 import sys
+import re
+import sqlite3
+from collections import Counter
+from contextlib import closing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +18,8 @@ sys.path.insert(0, str(ROOT))
 from benchmark import run
 from codebase import Repo
 from code_intelligence import search_file_candidates
+from knowledge_base import query_knowledge, expand_query_terms
+from knowledge_retrieval import safe_knowledge_terms, discover_concept_paths, related_source_paths
 
 
 
@@ -41,9 +47,10 @@ def summarize_candidate_results(results):
 
 
 
-def evaluate_case(repo, case, *, strategy='v59', limit=20):
-    ranked=search_file_candidates(
-        repo,case['question'],limit=max(20,limit),strategy=strategy)
+def evaluate_case(repo, case, *, strategy='v59', limit=20, ranked=None):
+    if ranked is None:
+        ranked=search_file_candidates(
+            repo,case['question'],limit=max(20,limit),strategy=strategy)
     gold={span['path'] for span in case['gold_spans']}
     result={'id':case['id'],'gold_files':len(gold)}
     for k in (8,20):
@@ -89,6 +96,95 @@ def compare_candidate_results(baseline, modified):
 
 
 
+
+def diagnose_case(repo, case, baseline_ranked, v59_ranked):
+    """Post-retrieval diagnosis; gold labels NEVER enter production ranking.
+
+    Check indexing separately from KB concept matching, independent concept
+    discovery, graph reachability, and final ranking to localize recall loss.
+    """
+    question=case['question']
+    gold={span['path'] for span in case['gold_spans']}
+    concepts=query_knowledge(question,limit=8)
+    raw_aliases=expand_query_terms(question,max_terms=6)
+    aliases=safe_knowledge_terms(raw_aliases,re.findall(r'[A-Za-z0-9_]+',question.lower()))
+    with closing(sqlite3.connect(repo.intelligence_db)) as conn:
+        indexed=set()
+        for path in gold:
+            if conn.execute('SELECT 1 FROM files WHERE path=?',(path,)).fetchone():
+                indexed.add(path)
+        kb_paths=discover_concept_paths(conn,aliases) if aliases else {}
+        graph_paths=related_source_paths(
+            conn,[r['path'] for r in baseline_ranked[:12]])
+    baseline_ranks={r['path']:idx+1 for idx,r in enumerate(baseline_ranked)}
+    variant_ranks={r['path']:idx+1 for idx,r in enumerate(v59_ranked)}
+    misses=gold-{r['path'] for r in v59_ranked[:20]}
+    if not gold.issubset(indexed):
+        obstacle='gold-not-indexed'
+    elif not concepts:
+        obstacle='no-concept-matched'
+    elif not aliases:
+        obstacle='no-safe-alias'
+    elif not kb_paths:
+        obstacle='no-kb-discovered-files'
+    elif not (gold & set(kb_paths)):
+        obstacle='kb-discovery-missed-gold'
+    elif misses & set(kb_paths):
+        obstacle='kb-gold-found-but-outside-top20'
+    elif misses:
+        obstacle='gold-missed-by-other-retrieval'
+    else:
+        obstacle='all-gold-top20'
+    return {
+        'id':case['id'],
+        'gold_files':len(gold),
+        'gold_indexed':len(indexed),
+        'gold_missing_from_index':sorted(gold-indexed),
+        'concept_ids':[x['concept_id'] for x in concepts],
+        'expanded_aliases':aliases,
+        'kb_discovered_files':len(kb_paths),
+        'kb_only_vs_baseline_top20':len(set(kb_paths)-set(baseline_ranks).intersection(
+            {r['path'] for r in baseline_ranked[:20]})),
+        'kb_gold_discovered':sorted(gold & set(kb_paths)),
+        'graph_neighbor_files':len(graph_paths),
+        'graph_gold_discovered':sorted(gold & set(graph_paths)),
+        'new_v59_paths_at_20':len(
+            {r['path'] for r in v59_ranked[:20]}-
+            {r['path'] for r in baseline_ranked[:20]}),
+        'missing_gold':[
+            {'path':p,'baseline_rank_50':baseline_ranks.get(p),
+             'v59_rank_50':variant_ranks.get(p),
+             'kb_found':p in kb_paths,'graph_found':p in graph_paths}
+            for p in sorted(misses)],
+        'diagnostic_category':obstacle,
+        'note':'Gold labels are used only after independent retrieval for diagnosis.'
+    }
+
+
+def summarize_diagnostics(rows):
+    categories=Counter(row['diagnostic_category'] for row in rows)
+    return {
+        'cases':len(rows),
+        'categories':dict(sorted(categories.items())),
+        'cases_with_matched_concepts':sum(bool(r['concept_ids']) for r in rows),
+        'cases_with_safe_aliases':sum(bool(r['expanded_aliases']) for r in rows),
+        'cases_with_kb_discovery':sum(r['kb_discovered_files']>0 for r in rows),
+        'cases_where_kb_reaches_gold':sum(bool(r['kb_gold_discovered']) for r in rows),
+        'cases_where_graph_reaches_gold':sum(bool(r['graph_gold_discovered']) for r in rows),
+        'cases_with_new_v59_top20_paths':sum(
+            r['new_v59_paths_at_20']>0 for r in rows),
+        'gold_files_missing_from_index':sum(
+            len(r['gold_missing_from_index']) for r in rows),
+        'gold_missed_top20_but_visible_top50_v59':sum(
+            sum(item['v59_rank_50'] is not None for item in r['missing_gold'])
+            for r in rows),
+        'gold_missed_top20_but_visible_top50_baseline':sum(
+            sum(item['baseline_rank_50'] is not None for item in r['missing_gold'])
+            for r in rows)
+    }
+
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--from-run',required=True,
@@ -97,6 +193,8 @@ def main(argv=None):
                         default='repocontextbench')
     parser.add_argument('--case-id',action='append',default=[])
     parser.add_argument('--limit',type=int,default=20)
+    parser.add_argument('--diagnose',action='store_true',
+                        help='Audit why KB, symbol or graph discovery missed gold (offline)')
     parser.add_argument('--compare',action='store_true',
                         help='Paired baseline vs V5.9 retrieval on the same cached index')
     parser.add_argument('--summary-only',action='store_true',
@@ -118,15 +216,41 @@ def main(argv=None):
     if wanted:selected=[c for c in selected if c['id'] in wanted]
     repo=Repo(checkout)
     repo.intelligence_db=index
-    results=[evaluate_case(repo,case,limit=args.limit) for case in selected]
+    # Diagnostics use a wider evaluation window, never an LLM call. They
+    # must not change the production top-8/top-20 retrieval budget.
+    ranked_limit=50 if args.diagnose else max(20,args.limit)
+    v59_ranked=[search_file_candidates(
+        repo,case['question'],limit=ranked_limit,strategy='v59')
+        for case in selected]
+    results=[evaluate_case(repo,case,limit=args.limit,ranked=ranked)
+             for case,ranked in zip(selected,v59_ranked)]
     aggregate=summarize_candidate_results(results)
     report={'suite':suite,'run_id':run_id,'strategy':'v59','summary':aggregate}
+    baseline_ranked=[]
+    if args.compare or args.diagnose:
+        baseline_ranked=[search_file_candidates(
+            repo,case['question'],limit=ranked_limit,strategy='baseline')
+            for case in selected]
     if args.compare:
-        baseline=[evaluate_case(repo,case,strategy='baseline',limit=args.limit)
-                  for case in selected]
+        baseline=[evaluate_case(repo,case,strategy='baseline',limit=args.limit,
+                                ranked=ranked)
+                  for case,ranked in zip(selected,baseline_ranked)]
         report['comparison']=compare_candidate_results(baseline,results)
         if not args.summary_only:
             report['baseline_cases']=baseline
+    if args.diagnose:
+        details=[diagnose_case(repo,case,base,variant)
+                 for case,base,variant in zip(
+                     selected,baseline_ranked,v59_ranked)]
+        report['diagnostics']={
+            'summary':summarize_diagnostics(details),
+            # Show all problem cases even with --summary-only, so users can
+            # identify what to fix without a huge top-candidates dump.
+            'problem_cases':[d for d in details
+                             if d['diagnostic_category']!='all-gold-top20']
+        }
+        if not args.summary_only:
+            report['diagnostics']['all_cases']=details
     if not args.summary_only:
         report['cases']=results
     print(json.dumps(report,ensure_ascii=False,indent=2))
