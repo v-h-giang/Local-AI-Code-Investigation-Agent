@@ -240,9 +240,9 @@ def _candidate_prompt(file_discovery):
     original=[r for r in rows if r.get('candidate_origin')!='qwen-plan-search']
     secondary=[r for r in rows if r.get('candidate_origin')=='qwen-plan-search']
     return (
-        '\\nOriginal file leads (UNTRUSTED): '
+        '\nOriginal file leads (UNTRUSTED): '
         +_compact_candidate_paths(original[:8],1050)
-        +'\\nQwen query file leads (UNTRUSTED; inspect actual source): '
+        +'\nQwen query file leads (UNTRUSTED; inspect actual source): '
         +_compact_candidate_paths(secondary[:4],850)
     )
 
