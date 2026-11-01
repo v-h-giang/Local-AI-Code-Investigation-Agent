@@ -334,7 +334,7 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
                 and isinstance(row.get('path'),str)
                 and row['path'].endswith(('.py','.cs','.java','.fs','.go','.rs','.f90','.f95','.c','.cpp','.h'))
                 and isinstance(row.get('path_score'),(int,float))
-                and row['path_score'] >= 8)
+                and row['path_score'] > 0)
     original_candidate=next((c for c in candidates[:8]
                              if navigable_source(c)),None)
     secondary_candidate=next((c for c in candidates
