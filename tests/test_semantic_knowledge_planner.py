@@ -122,6 +122,12 @@ class SemanticKnowledgePlannerTests(unittest.TestCase):
             result["file_discovery"].get("qwen_secondary_candidates",0),1)
         self.assertTrue(all(not item.get("citation",False)
                             for item in result["file_discovery"]["candidates"]))
+        # V5.12 ensures secondary navigation is actually inspected rather
+        # than merely displayed to Qwen. Such leads are not source citations.
+        self.assertIn("module.f90",result["candidate_probe_paths"])
+        self.assertIn("module.f90",result["inspected_candidate_paths"])
+        self.assertEqual(result["steps"][0]["tool"],"search_file")
+
 
     def test_lexical_fallback_does_not_trust_plan_for_extra_discovery(self):
         from investigation_loop import investigate_iteratively
