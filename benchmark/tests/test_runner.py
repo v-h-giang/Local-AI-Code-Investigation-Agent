@@ -108,6 +108,25 @@ class BenchmarkTests(unittest.TestCase):
             self.assertTrue(report['concept_ids'])
             self.assertEqual(report['diagnostic_category'],'all-gold-top20')
 
+    def test_ai_secondary_discovery_is_measured_separately_from_first_eight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root/"original.py").write_text("original\n",encoding="utf-8")
+            (root/"secondary.py").write_text("secondary\n",encoding="utf-8")
+            record={"evidence":[],"investigation":{
+                "file_discovery":{"candidates":[
+                    {"path":"original.py","citation":False},
+                    {"path":"secondary.py","candidate_origin":"qwen-plan-search",
+                     "citation":False}]},
+                "steps":[]}}
+            case={"gold_spans":[{"path":"secondary.py","start_line":1,"end_line":1}]}
+            result=run.score_evidence(root,case,record)
+            self.assertEqual(result["candidate_gold_file_hits"],1)
+            self.assertEqual(result["ai_assisted_candidate_gold_hits_at_12"],1)
+            self.assertEqual(result["qwen_secondary_gold_hits"],1)
+            self.assertEqual(result["qwen_secondary_candidates"],1)
+            self.assertEqual(result["observed_gold_file_hits"],0)
+
     def test_dataset_exactly_30(self):
         cases = run.read_cases()
         self.assertEqual(len(cases), 30)
