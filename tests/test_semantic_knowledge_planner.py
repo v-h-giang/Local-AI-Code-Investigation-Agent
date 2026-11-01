@@ -134,6 +134,22 @@ class SemanticKnowledgePlannerTests(unittest.TestCase):
         self.assertEqual(
             result["file_discovery"].get("qwen_secondary_candidates",0),0)
 
+    def test_secondary_file_leads_are_visible_in_tool_prompt(self):
+        from investigation_loop import _candidate_prompt
+        originals=[{"path":f"src/module_{n}.py","file_role":"implementation",
+                    "path_score":50+n,"content_terms":["checkpoint"]*10}
+                   for n in range(8)]
+        secondary=[{"path":"src/restoration.py","file_role":"implementation",
+                    "candidate_origin":"qwen-plan-search",
+                    "planner_query":"restore checkpoint"}]
+        prompt=_candidate_prompt({"candidates":originals+secondary})
+        self.assertIn("\nQwen query file leads ",prompt)
+        self.assertIn("src/restoration.py",prompt)
+        self.assertIn("restore checkpoint",prompt)
+        self.assertIn("src/module_0.py",prompt)
+        self.assertNotIn('"path_score"',prompt)
+        self.assertLess(len(prompt),2300)
+
     def test_without_model_never_calls_semantic_planner(self):
         with patch("code_intelligence._plan_with_qwen",
                    side_effect=AssertionError("model used")):
