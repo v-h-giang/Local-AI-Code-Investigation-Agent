@@ -243,6 +243,15 @@ def score_evidence(project, case, record):
     candidates=(discovered.get('candidates') or [])[:8]
     candidate_files={path for item in candidates if isinstance(item,dict)
                      if (path:=valid_candidate_file(project,item.get('path')))}
+    # V5.11: the first eight leads are deterministic; Qwen-derived secondary
+    # candidates are appended AFTER them. Keep legacy @8 intact and report
+    # AI-assisted discovery separately, so metrics are not conflated.
+    all_leads=(discovered.get('candidates') or [])[:12]
+    validated_leads={path for item in all_leads if isinstance(item,dict)
+                     if (path:=valid_candidate_file(project,item.get('path')))}
+    secondary_leads={path for item in all_leads if isinstance(item,dict)
+                     and item.get('candidate_origin')=='qwen-plan-search'
+                     if (path:=valid_candidate_file(project,item.get('path')))}
     observed_refs=visible_tool_refs(project,investigation)
     observed_files={path for path,_ in observed_refs}
     observed_spans=sum(any(path==span['path']
@@ -259,6 +268,11 @@ def score_evidence(project, case, record):
         'candidate_gold_file_hits': candidate_file_hits,
         'candidate_file_recall_at_8': round(candidate_file_hits / len(gold_files),4)
                                       if gold_files else None,
+        'ai_assisted_candidate_gold_hits_at_12':len(validated_leads & gold_files),
+        'ai_assisted_candidate_file_recall_at_12':
+            round(len(validated_leads & gold_files)/len(gold_files),4) if gold_files else None,
+        'qwen_secondary_candidates':len(secondary_leads),
+        'qwen_secondary_gold_hits':len(secondary_leads & gold_files),
         'observed_gold_file_hits': observed_file_hits,
         'observed_file_recall': round(observed_file_hits / len(gold_files),4)
                                 if gold_files else None,
@@ -395,6 +409,9 @@ def save_report(run_dir, records, args, selected_count, cases=None):
     hits = sum(x.get('gold_span_hits', 0) for x in records)
     files_hit = sum(x.get('gold_file_hits', 0) for x in records)
     candidate_hits = sum(x.get('candidate_gold_file_hits',0) for x in records)
+    assisted_hits = sum(x.get('ai_assisted_candidate_gold_hits_at_12',0) for x in records)
+    secondary_hits = sum(x.get('qwen_secondary_gold_hits',0) for x in records)
+    secondary_paths = sum(x.get('qwen_secondary_candidates',0) for x in records)
     observed_file_hits = sum(x.get('observed_gold_file_hits',0) for x in records)
     observed_span_hits = sum(x.get('observed_gold_span_hits',0) for x in records)
     # A saved JSON is evidence of execution, not of a successful CLI call.
@@ -424,6 +441,10 @@ def save_report(run_dir, records, args, selected_count, cases=None):
                'gold_file_recall_proxy': round(files_hit / files_total, 4) if files_total and with_evidence else None,
                'candidate_file_recall_at_8': round(candidate_hits / files_total, 4)
                                              if files_total else None,
+               'ai_assisted_candidate_file_recall_at_12':
+                   round(assisted_hits / files_total,4) if files_total else None,
+               'qwen_secondary_candidates': secondary_paths,
+               'qwen_secondary_gold_hits': secondary_hits,
                'observed_file_recall': round(observed_file_hits / files_total, 4)
                                        if files_total else None,
                'observed_span_recall': round(observed_span_hits / gold, 4) if gold else None,
