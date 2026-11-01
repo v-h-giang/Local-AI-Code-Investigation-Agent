@@ -18,6 +18,8 @@ on:
       - "tests/**"
       - "benchmark/tests/**"
       - "benchmark/inspect_candidates.py"
+      - "benchmark/run.py"
+      - "benchmark/rescore_existing.py"
   workflow_dispatch:
 
 permissions:
