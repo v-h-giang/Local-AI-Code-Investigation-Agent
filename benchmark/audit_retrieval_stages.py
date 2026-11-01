@@ -51,7 +51,10 @@ def audit(run_id, suite="repocontextbench"):
         ranked_8 = {p for rank, p, _ in valid_candidates if rank <= 8}
         ranked_12 = {p for rank, p, _ in valid_candidates if rank <= 12}
         observed = {p for p, _ in run.visible_tool_refs(project, investigation)}
-        visited = set()
+        visited = {
+            path for path in investigation.get("inspected_candidate_paths") or []
+            if run.valid_candidate_file(project, path)
+        }
         for step in investigation.get("steps") or []:
             if not isinstance(step, dict):
                 continue
