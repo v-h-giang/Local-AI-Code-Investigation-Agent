@@ -49,6 +49,35 @@ regressions at 8 and 20 files. Compare with baseline micro recall @8=0.2203
 and @20=0.3390 **only if the old index and 20 cases are the same**. Any source
 graph connections remain candidate-only and do not prove runtime execution.
 
+## Rescore an existing AI run without Ollama
+
+When a V5.11 AI benchmark shows low original candidate @8 recall, evaluate
+whether Qwen-generated *secondary* file leads helped at positions 9–12.
+The legacy metric deliberately only evaluates the first eight original
+candidates; it cannot evaluate Qwen's additional leads.
+
+```powershell
+.\.venv\Scripts\python.exe benchmark\rescore_existing.py `
+  --from-run semantic_kb_v511_smoke `
+  --suite repocontextbench
+```
+
+This reads the existing per-case `middle-files/investigations/*.json`
+records and validates all files against the pinned local repo. It does
+not re-run Qwen, alter saved results, or rebuild indexes.
+
+Inspect `original_candidate_recall_at_8`,
+`ai_assisted_candidate_recall_at_12`, `qwen_secondary_gold_hits`,
+and `observed_file_recall` separately:
+
+- Candidate recall measures *navigation leads*, not evidence or correctness.
+- Observed file recall requires an actual file:line in a tool observation.
+- Citation validity checks citation structure, not whether the answer is right.
+
+V5.11.1 also shows both original and Qwen-derived candidate paths in the
+model's bounded next-tool prompt. Previously the full candidate metadata
+could crowd out secondary file leads.
+
 ## V5.10 experimental retrieval fusion — opt-in, offline
 
 Diagnosis on RepoContextBench showed that the source index contains all gold
