@@ -128,6 +128,38 @@ class BenchmarkTests(unittest.TestCase):
             self.assertEqual(result["qwen_secondary_candidates"],1)
             self.assertEqual(result["observed_gold_file_hits"],0)
 
+    def test_offline_rescore_aggregates_saved_machine_results(self):
+        from rescore_existing import rescore
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)
+            folder=base/"case-a"
+            folder.mkdir()
+            (folder/"record.txt").write_text("placeholder",encoding="utf-8")
+            case={"id":"case-a","suite":"repocontextbench","gold_spans":[]}
+            payload={
+                "candidate_gold_file_hits":1,"ai_assisted_candidate_gold_hits_at_12":2,
+                "qwen_secondary_candidates":3,"qwen_secondary_gold_hits":1,
+                "observed_gold_file_hits":1,"observed_gold_span_hits":1,
+                "gold_files":4
+            }
+            with patch("rescore_existing.run.RESULTS",base),\
+                 patch("rescore_existing.run.read_cases",return_value=[case]),\
+                 patch("rescore_existing.run.CACHES",base),\
+                 patch("rescore_existing.run.REPOS",
+                       {"repocontextbench":("x","pin","case-a")}),\
+                 patch("rescore_existing.run.git",return_value="pin"),\
+                 patch("rescore_existing.run.load_machine",return_value={}),\
+                 patch("rescore_existing.run.score_evidence",return_value=payload):
+                # Data is stored under RESULTS/<run-id>/<case-id>.
+                run_dir=base/"saved_run"
+                run_dir.mkdir()
+                (run_dir/"case-a").mkdir()
+                report=rescore("saved_run",suite="repocontextbench")
+            self.assertEqual(report["scorable_cases"],1)
+            self.assertEqual(report["original_candidate_recall_at_8"],0.25)
+            self.assertEqual(report["ai_assisted_candidate_recall_at_12"],0.5)
+            self.assertEqual(report["qwen_secondary_gold_hits"],1)
+
     def test_dataset_exactly_30(self):
         cases = run.read_cases()
         self.assertEqual(len(cases), 30)
