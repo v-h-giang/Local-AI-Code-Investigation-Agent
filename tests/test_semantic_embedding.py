@@ -144,13 +144,19 @@ class SemanticEmbeddingTests(unittest.TestCase):
         longbody=''.join(f"print({n})\\n" for n in range(400))
         bad=('bad.f90',1,400,'File: bad.f90\\nLines: 1-400\\n'+longbody,'first')
         good=('good.f90',1,3,'File: good.f90\\nLines: 1-3\\na\\nb\\nc','first')
-        stats={'embed_batch_splits':0,'embed_chunks_shortened':0}
+        stats={'embed_batch_splits':0,'embed_chunk_splits':0,'embed_chunks_shortened':0}
         got=_embed_index_rows(TooLong(),[good,bad],stats)
-        self.assertEqual(len(got),2)
+        self.assertGreater(len(got),2)
         self.assertGreater(stats['embed_batch_splits'],0)
-        self.assertEqual(stats['embed_chunks_shortened'],1)
+        self.assertGreater(stats['embed_chunk_splits'],0)
+        self.assertEqual(stats['embed_chunks_shortened'],0)
         self.assertEqual(got[0][2],3)
-        self.assertLess(got[1][2],400)
+        spans=[(item[0][1], covered_end) for item,vec,covered_end in got
+               if item[0][0]=='bad.f90']
+        self.assertEqual(spans[0][0],1)
+        self.assertEqual(spans[-1][1],400)
+        self.assertTrue(all(spans[i][1]+1==spans[i+1][0]
+                            for i in range(len(spans)-1)))
 
     def test_chunk_shortening_preserves_indexed_source_start(self):
         from semantic_retrieval import _shorten_failed_chunk
