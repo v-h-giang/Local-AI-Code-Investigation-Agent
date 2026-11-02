@@ -59,7 +59,7 @@ def compare(run_id,suite,db,embedder,case_ids=()):
             variants[mode]={
                 'file_hits_at_8':len(candidates[8]&relevant),
                 'file_hits_at_20':len(candidates[20]&relevant),
-                'chunk_span_overlap_hits_at_20':window_hits,
+                'chunk_span_overlap_hits_at_20':window_hits if mode!='baseline' else None,
                 'rank_of_first_gold':next((i for i,p in enumerate(paths,1)
                                            if p in relevant),None),
                 'seconds':round(secs,3),
@@ -73,11 +73,12 @@ def compare(run_id,suite,db,embedder,case_ids=()):
         gold_spans=sum(x['gold_spans'] for x in result)
         hits8=sum(x['variants'][mode]['file_hits_at_8'] for x in result)
         hits20=sum(x['variants'][mode]['file_hits_at_20'] for x in result)
-        span_hits=sum(x['variants'][mode]['chunk_span_overlap_hits_at_20'] for x in result)
+        span_hits=sum(x['variants'][mode]['chunk_span_overlap_hits_at_20'] or 0 for x in result)
         summary[mode]={
             'recall_at_8':round(hits8/gold_files,4) if gold_files else None,
             'recall_at_20':round(hits20/gold_files,4) if gold_files else None,
-            'chunk_span_overlap_at_20':round(span_hits/gold_spans,4) if gold_spans else None,
+            'chunk_span_overlap_at_20':(round(span_hits/gold_spans,4) if gold_spans else None)
+                                       if mode!='baseline' else None,
             'total_query_seconds':round(sum(x['variants'][mode]['seconds'] for x in result),3),
         }
     return {'suite':suite,'run_id':run_id,'case_count':len(result),
