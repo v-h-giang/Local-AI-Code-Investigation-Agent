@@ -55,10 +55,12 @@ class SemanticEmbeddingTests(unittest.TestCase):
         (self.repo.root/'orders.f90').write_text(
             'subroutine save_order\nprint *, "saved"\nend subroutine\n',encoding='utf-8')
         self.intelligence=self.folder/'intelligence.sqlite'
-        with sqlite3.connect(self.intelligence) as conn:
-            conn.execute('CREATE TABLE files (path TEXT PRIMARY KEY)')
-            conn.executemany('INSERT INTO files VALUES (?)',
-                             [('checkpoint_impl.f90',),('orders.f90',)])
+        from contextlib import closing
+        with closing(sqlite3.connect(self.intelligence)) as conn:
+            with conn:
+                conn.execute('CREATE TABLE files (path TEXT PRIMARY KEY)')
+                conn.executemany('INSERT INTO files VALUES (?)',
+                                 [('checkpoint_impl.f90',),('orders.f90',)])
         self.db=self.folder/'semantic.sqlite'
         self.embedder=FakeEmbedder()
 
