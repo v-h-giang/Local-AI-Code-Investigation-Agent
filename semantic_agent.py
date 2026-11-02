@@ -30,6 +30,11 @@ def main(argv=None):
     if database is None:
         raise SystemExit('Embedding DB is required: --semantic-db or LOCAL_CODE_AGENT_EMBEDDING_DB')
     database = Path(database).resolve()
+    if database.is_dir():
+        if '--project' not in remaining:
+            raise SystemExit('Missing --project for semantic DB directory resolution')
+        project = Path(remaining[remaining.index('--project')+1]).resolve()
+        database = database / (project.name + '.sqlite')
     if not database.is_file():
         raise SystemExit('Embedding DB does not exist: ' + str(database))
 
