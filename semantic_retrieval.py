@@ -65,6 +65,13 @@ class OllamaEmbedder:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 content = json.loads(response.read(30_000_000))
+        except urllib.error.HTTPError as exc:
+            # HTTPError subclasses URLError: decode the response FIRST or we
+            # lose the actionable Ollama reason (e.g. EOF / context / model).
+            detail = exc.read(2048).decode('utf-8', errors='replace').strip()
+            raise RuntimeError(
+                f'Ollama /api/embed HTTP {exc.code}: ' +
+                (detail[:600] if detail else str(exc.reason))) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             raise RuntimeError('Cannot reach local Ollama /api/embed: ' + str(exc)) from exc
         vectors = content.get('embeddings')
@@ -125,6 +132,70 @@ def _source_paths(index_db):
         return [row[0] for row in conn.execute('SELECT path FROM files ORDER BY path')]
 
 
+
+def _shorten_failed_chunk(entry, char_limit):
+    """Shorten at real source-line boundaries; never pretend omitted lines were embedded."""
+    path, start, end, text, preview = entry
+    first, sep, remain = text.partition('\n')
+    line_label, sep2, source = remain.partition('\n')
+    if not sep or not sep2:
+        raise ValueError('Malformed indexed embedding chunk')
+    prefix = f'{first}\nLines: {start}-{end}\n'
+    remaining = char_limit - len(prefix)
+    if remaining <= 0:
+        raise ValueError('Embedding chunk path/header exceeds fallback limit')
+    kept = []
+    for source_line in source.splitlines(keepends=True):
+        if len(source_line) > remaining:
+            if not kept:
+                kept.append(source_line[:remaining])
+            break
+        kept.append(source_line)
+        remaining -= len(source_line)
+    if not kept:
+        raise ValueError('Cannot shorten empty embedding chunk')
+    covered_end = min(end, start + len(kept) - 1)
+    short = f'{first}\nLines: {start}-{covered_end}\n' + ''.join(kept)
+    return short, covered_end
+
+
+def _embed_index_rows(embedder, rows, stats):
+    """Recover from batch HTTP 400 without discarding previously indexed work.
+
+    On singleton HTTP 400, try a smaller, source-line-bounded excerpt.
+    Record its ACTUAL covered end line in SQLite; do not claim the original
+    48-line chunk was fully embedded. Other failures remain visible.
+    """
+    try:
+        vectors = embedder.embed([item[3] for item in rows], keep_alive='5m')
+        return [(item, vector, item[2]) for item, vector in zip(rows, vectors)]
+    except RuntimeError as exc:
+        if 'HTTP 400' not in str(exc):
+            raise
+        if len(rows) > 1:
+            stats['embed_batch_splits'] += 1
+            middle = len(rows) // 2
+            return (_embed_index_rows(embedder, rows[:middle], stats) +
+                    _embed_index_rows(embedder, rows[middle:], stats))
+        original = rows[0]
+        for limit in (3500, 1800, 900):
+            if len(original[3]) <= limit:
+                continue
+            shortened, actual_end = _shorten_failed_chunk(original, limit)
+            try:
+                vector = embedder.embed([shortened], keep_alive='5m')[0]
+            except RuntimeError as retry_error:
+                if 'HTTP 400' in str(retry_error):
+                    continue
+                raise
+            stats['embed_chunks_shortened'] += 1
+            return [(original, vector, actual_end)]
+        raise RuntimeError(
+            'Embedding chunk failed even after bounded retries for ' +
+            original[0] + ':' + str(original[1]) +
+            '. Original Ollama error: ' + str(exc)[:300]) from exc
+
+
 def index_project(repo, intelligence_db, destination, embedder, *, chunk_lines=48,
                   overlap=12, batch_size=16, max_files=0, progress=None):
     """Resumable incremental indexing. Incomplete files never enter results."""
@@ -141,6 +212,7 @@ def index_project(repo, intelligence_db, destination, embedder, *, chunk_lines=4
         paths = paths[:max(1, int(max_files))]
     stats = {'files_total': len(paths), 'files_changed': 0,
              'files_reused': 0, 'files_failed': 0, 'chunks_embedded': 0,
+             'embed_batch_splits': 0, 'embed_chunks_shortened': 0,
              'index': str(target)}
     with closing(sqlite3.connect(target)) as conn:
         _configure(conn)
@@ -164,11 +236,11 @@ def index_project(repo, intelligence_db, destination, embedder, *, chunk_lines=4
             nonlocal pending
             if not pending:
                 return
-            vectors = embedder.embed([entry[3] for entry in pending], keep_alive='5m')
+            embedded_rows = _embed_index_rows(embedder, pending, stats)
             with conn:
-                for (path, start, end, _body, preview), vector in zip(pending, vectors):
+                for (path, start, end, _body, preview), vector, covered_end in embedded_rows:
                     conn.execute('INSERT OR REPLACE INTO chunks VALUES (?,?,?,?,?)',
-                                 (path, start, end, vector.tobytes(), preview))
+                                 (path, start, covered_end, vector.tobytes(), preview))
                     conn.execute('UPDATE indexed_files SET received=received+1 WHERE path=?',
                                  (path,))
                 conn.execute('UPDATE indexed_files SET complete=1 '
@@ -289,6 +361,10 @@ def _rrf(ranked_views, limit=20, rrf_k=40):
                 row['line_hint']=hint
                 row['line_start']=item.get('start_line',hint)
                 row['line_end']=item.get('end_line',hint)
+                # Keep both legacy wrapper aliases and the canonical range
+                # keys used by benchmark/embedding_compare.py.
+                row['start_line']=row['line_start']
+                row['end_line']=row['line_end']
                 row['line_hint_source']=name
     results=sorted(scores,key=lambda path:(-scores[path],-len(info[path]['retrieval_views']),path))
     for path in results:
