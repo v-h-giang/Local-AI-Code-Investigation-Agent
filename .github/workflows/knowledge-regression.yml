@@ -3,8 +3,6 @@ name: Offline source knowledge regression
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
     paths:
       - ".github/workflows/knowledge-regression.yml"
       - "knowledge/**"
@@ -24,6 +22,8 @@ on:
       - "benchmark/rescore_existing.py"
       - "benchmark/audit_retrieval_stages.py"
       - "investigation_loop.py"
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
