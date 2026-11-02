@@ -323,23 +323,34 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
             file_discovery=dict(file_discovery,candidates=candidates,
                                 qwen_secondary_candidates=len(suggested))
     actions=_tools_for_plan(dict(plan,question=question))
-    # V5.12: explicitly reserve a file-level probe for an independent
-    # Qwen-query lead. Previously secondary candidates were visible in the
-    # prompt but had no deterministic path into the tool-action queue.
-    # The original first probe remains first; Qwen leads are untrusted
-    # navigation hints and never become citations without actual file lines.
-    def navigable_source(row):
+    # V5.12: preserve the original primary action selection. The old
+    # implementation only promoted a high-scoring implementation/sample to
+    # the first file probe; a generic "other" candidate must not preempt the
+    # original plan's first search (see test_followup_tool_selected_by_qwen).
+    def original_source(row):
         return (isinstance(row,dict)
+                and row.get('file_role') in ('implementation','sample')
+                and isinstance(row.get('path'),str)
+                and row['path'].endswith(('.py','.cs','.java','.fs','.go','.rs'))
+                and isinstance(row.get('path_score'),(int,float))
+                and row['path_score']>=14)
+    original_candidate=next((c for c in candidates[:8]
+                             if original_source(c)),None)
+    # Secondary Qwen query hits are useful for navigation, but must be
+    # inspected to produce real source-line evidence. Permit "other" and
+    # Fortran extensions for these NEW candidates only; never trust a
+    # candidate path as a citation by itself.
+    def secondary_source(row):
+        return (isinstance(row,dict)
+                and row.get('candidate_origin')=='qwen-plan-search'
                 and row.get('file_role') in ('implementation','sample','other')
                 and isinstance(row.get('path'),str)
-                and row['path'].endswith(('.py','.cs','.java','.fs','.go','.rs','.f90','.f95','.c','.cpp','.h'))
+                and row['path'].endswith(('.py','.cs','.java','.fs','.go','.rs',
+                                          '.f90','.f95','.c','.cpp','.h'))
                 and isinstance(row.get('path_score'),(int,float))
-                and row['path_score'] > 0)
-    original_candidate=next((c for c in candidates[:8]
-                             if navigable_source(c)),None)
+                and row['path_score']>0)
     secondary_candidate=next((c for c in candidates
-                              if c.get('candidate_origin')=='qwen-plan-search'
-                              and navigable_source(c)
+                              if secondary_source(c)
                               and (original_candidate is None or
                                    c.get('path')!=original_candidate.get('path'))),None)
     candidate_probes=[]
@@ -351,9 +362,6 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         candidate_probes.append({
             'tool':'search_file','path':secondary_candidate['path'],
             'query':str(secondary_candidate.get('planner_query') or question)[:700]})
-    # Preserve the first original implementation probe and use a dedicated
-    # Qwen probe as the second deterministic fallback. For query-only cases,
-    # the Qwen probe becomes the first concrete file inspection.
     actions=candidate_probes+actions
     candidate_probe_paths=[x['path'] for x in candidate_probes]
     def action_key(action):
