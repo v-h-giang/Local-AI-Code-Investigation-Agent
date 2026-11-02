@@ -159,6 +159,32 @@ def _shorten_failed_chunk(entry, char_limit):
     return short, covered_end
 
 
+def _bisect_chunk_at_lines(entry):
+    """Split one failed chunk without losing source lines."""
+    path,start,end,text,preview=entry
+    header,sep,tail=text.partition('\n')
+    label,sep2,body=tail.partition('\n')
+    if not sep or not sep2:
+        return None
+    lines=body.splitlines(keepends=True)
+    if len(lines)<2:
+        return None
+    midpoint=len(lines)//2
+    first=lines[:midpoint]
+    second=lines[midpoint:]
+    left_end=start+len(first)-1
+    right_start=left_end+1
+    # The input might already be char-clipped in the original indexer.
+    # Avoid fabricating coverage beyond the text that was embedded.
+    right_end=min(end,right_start+len(second)-1)
+    left=(path,start,left_end,
+          f'{header}\nLines: {start}-{left_end}\n'+''.join(first),preview)
+    right=(path,right_start,right_end,
+           f'{header}\nLines: {right_start}-{right_end}\n'+''.join(second),
+           next((line.strip()[:180] for line in second if line.strip()),preview))
+    return left,right
+
+
 def _embed_index_rows(embedder, rows, stats):
     """Recover from batch HTTP 400 without discarding previously indexed work.
 
@@ -178,6 +204,15 @@ def _embed_index_rows(embedder, rows, stats):
             return (_embed_index_rows(embedder, rows[:middle], stats) +
                     _embed_index_rows(embedder, rows[middle:], stats))
         original = rows[0]
+        # Prefer line-preserving recursion: silent truncation would cause
+        # missing gold spans while incorrectly marking the file complete.
+        halves = _bisect_chunk_at_lines(original)
+        if halves is not None:
+            stats['embed_chunk_splits'] += 1
+            return (_embed_index_rows(embedder,[halves[0]],stats) +
+                    _embed_index_rows(embedder,[halves[1]],stats))
+        # An individual pathological source line cannot be split at a real
+        # line boundary. Keep a bounded emergency fallback for that case.
         for limit in (3500, 1800, 900):
             if len(original[3]) <= limit:
                 continue
@@ -212,7 +247,8 @@ def index_project(repo, intelligence_db, destination, embedder, *, chunk_lines=4
         paths = paths[:max(1, int(max_files))]
     stats = {'files_total': len(paths), 'files_changed': 0,
              'files_reused': 0, 'files_failed': 0, 'chunks_embedded': 0,
-             'embed_batch_splits': 0, 'embed_chunks_shortened': 0,
+             'embed_batch_splits': 0, 'embed_chunk_splits': 0,
+             'embed_chunks_shortened': 0,
              'index': str(target)}
     with closing(sqlite3.connect(target)) as conn:
         _configure(conn)
@@ -237,7 +273,17 @@ def index_project(repo, intelligence_db, destination, embedder, *, chunk_lines=4
             if not pending:
                 return
             embedded_rows = _embed_index_rows(embedder, pending, stats)
+            # A 48-line chunk may expand into two or more stored rows after
+            # recursive fallback. Adjust per-file expected counts atomically.
+            from collections import Counter
+            input_count=Counter(item[0] for item in pending)
+            output_count=Counter(item[0][0] for item in embedded_rows)
             with conn:
+                for path,count in output_count.items():
+                    delta=count-input_count[path]
+                    if delta:
+                        conn.execute('UPDATE indexed_files SET expected=expected+? WHERE path=?',
+                                     (delta,path))
                 for (path, start, end, _body, preview), vector, covered_end in embedded_rows:
                     conn.execute('INSERT OR REPLACE INTO chunks VALUES (?,?,?,?,?)',
                                  (path, start, covered_end, vector.tobytes(), preview))
@@ -245,7 +291,7 @@ def index_project(repo, intelligence_db, destination, embedder, *, chunk_lines=4
                                  (path,))
                 conn.execute('UPDATE indexed_files SET complete=1 '
                              'WHERE received>=expected AND complete=0')
-            stats['chunks_embedded'] += len(pending)
+            stats['chunks_embedded'] += len(embedded_rows)
             pending = []
 
         for path in paths:
