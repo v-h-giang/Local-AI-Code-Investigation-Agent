@@ -141,9 +141,9 @@ class SemanticEmbeddingTests(unittest.TestCase):
                 if len(texts)>1 or len(texts[0])>1700:
                     raise RuntimeError('Ollama /api/embed HTTP 400: requested context too large')
                 return [array('f',[1.0,0.0,0.0,0.0]) for _ in texts]
-        longbody=''.join(f"print({n})\\n" for n in range(400))
-        bad=('bad.f90',1,400,'File: bad.f90\\nLines: 1-400\\n'+longbody,'first')
-        good=('good.f90',1,3,'File: good.f90\\nLines: 1-3\\na\\nb\\nc','first')
+        longbody=''.join(f"print({n})\n" for n in range(400))
+        bad=('bad.f90',1,400,'File: bad.f90\nLines: 1-400\n'+longbody,'first')
+        good=('good.f90',1,3,'File: good.f90\nLines: 1-3\na\nb\nc','first')
         stats={'embed_batch_splits':0,'embed_chunk_splits':0,'embed_chunks_shortened':0}
         got=_embed_index_rows(TooLong(),[good,bad],stats)
         self.assertGreater(len(got),2)
@@ -160,11 +160,11 @@ class SemanticEmbeddingTests(unittest.TestCase):
 
     def test_chunk_shortening_preserves_indexed_source_start(self):
         from semantic_retrieval import _shorten_failed_chunk
-        body=''.join('call operation()\\n' for _ in range(100))
-        chunk=('source.f90',29,128,'File: source.f90\\nLines: 29-128\\n'+body,'call')
+        body=''.join('call operation()\n' for _ in range(100))
+        chunk=('source.f90',29,128,'File: source.f90\nLines: 29-128\n'+body,'call')
         shortened,covered_end=_shorten_failed_chunk(chunk,900)
-        self.assertTrue(shortened.startswith('File: source.f90\\nLines: 29-'))
-        self.assertTrue(shortened.endswith('\\n') or 'call operation' in shortened)
+        self.assertTrue(shortened.startswith('File: source.f90\nLines: 29-'))
+        self.assertTrue(shortened.endswith('\n') or 'call operation' in shortened)
         self.assertGreaterEqual(covered_end,29)
         self.assertLess(covered_end,128)
 
