@@ -151,8 +151,8 @@ class SemanticEmbeddingTests(unittest.TestCase):
         self.assertGreater(stats['embed_chunk_splits'],0)
         self.assertEqual(stats['embed_chunks_shortened'],0)
         self.assertEqual(got[0][2],3)
-        spans=[(item[0][1], covered_end) for item,vec,covered_end in got
-               if item[0][0]=='bad.f90']
+        spans=[(item[1], covered_end) for item,vec,covered_end in got
+               if item[0]=='bad.f90']
         self.assertEqual(spans[0][0],1)
         self.assertEqual(spans[-1][1],400)
         self.assertTrue(all(spans[i][1]+1==spans[i+1][0]
