@@ -120,6 +120,49 @@ class SemanticEmbeddingTests(unittest.TestCase):
         self.assertFalse(rows[0]['citation'])
 
 
+    def test_hybrid_provides_canonical_source_windows_for_span_scoring(self):
+        index_project(self.repo,self.intelligence,self.db,self.embedder)
+        found=hybrid_search(self.repo,'resume workflow',self.db,self.embedder,limit=8,
+                            lexical_search=lambda *args,**kw:[],
+                            source_search=lambda *args,**kw:[])
+        self.assertTrue(found)
+        with_ranges=[x for x in found if x.get('line_hint_source')=='dense']
+        self.assertTrue(with_ranges)
+        for row in with_ranges:
+            self.assertEqual(row['start_line'],row['line_start'])
+            self.assertEqual(row['end_line'],row['line_end'])
+            self.assertLessEqual(row['start_line'],row['end_line'])
+            self.assertFalse(row['citation'])
+
+    def test_http_400_batch_fallback_and_bounded_chunk_retry(self):
+        from semantic_retrieval import _embed_index_rows
+        class TooLong:
+            def embed(self,texts,*,query=False,keep_alive='5m'):
+                if len(texts)>1 or len(texts[0])>1700:
+                    raise RuntimeError('Ollama /api/embed HTTP 400: requested context too large')
+                return [array('f',[1.0,0.0,0.0,0.0]) for _ in texts]
+        longbody=''.join(f"print({n})\\n" for n in range(400))
+        bad=('bad.f90',1,400,'File: bad.f90\\nLines: 1-400\\n'+longbody,'first')
+        good=('good.f90',1,3,'File: good.f90\\nLines: 1-3\\na\\nb\\nc','first')
+        stats={'embed_batch_splits':0,'embed_chunks_shortened':0}
+        got=_embed_index_rows(TooLong(),[good,bad],stats)
+        self.assertEqual(len(got),2)
+        self.assertGreater(stats['embed_batch_splits'],0)
+        self.assertEqual(stats['embed_chunks_shortened'],1)
+        self.assertEqual(got[0][2],3)
+        self.assertLess(got[1][2],400)
+
+    def test_chunk_shortening_preserves_indexed_source_start(self):
+        from semantic_retrieval import _shorten_failed_chunk
+        body=''.join('call operation()\\n' for _ in range(100))
+        chunk=('source.f90',29,128,'File: source.f90\\nLines: 29-128\\n'+body,'call')
+        shortened,covered_end=_shorten_failed_chunk(chunk,900)
+        self.assertTrue(shortened.startswith('File: source.f90\\nLines: 29-'))
+        self.assertTrue(shortened.endswith('\\n') or 'call operation' in shortened)
+        self.assertGreaterEqual(covered_end,29)
+        self.assertLess(covered_end,128)
+
+
 
 class SemanticAgentWrapperTests(unittest.TestCase):
     def test_wrapper_uses_indexed_span_to_read_source_and_keeps_baseline(self):
