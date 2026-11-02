@@ -19,7 +19,8 @@ def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
     options = argparse.ArgumentParser(add_help=False)
     options.add_argument('--semantic-db')
-    options.add_argument('--semantic-mode',choices=('hybrid','dense'),default='hybrid')
+    options.add_argument('--semantic-mode',choices=('hybrid','dense'),
+                         default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'))
     options.add_argument('--semantic-model',default='qwen3-embedding:0.6b')
     options.add_argument('--semantic-dimensions',type=int,default=1024)
     settings,remaining = options.parse_known_args(args)
