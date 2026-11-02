@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
 from pathlib import Path
 
 import run
@@ -110,10 +109,17 @@ def audit(run_id, suite="repocontextbench"):
             "observed_recall": round(totals["observed_gold_hits"] / denominator, 4) if denominator else None,
             "cases_with_candidate_attrition": sum(bool(r["gold_candidate_not_visited"]) for r in valid),
             "cases_with_evidence_attrition": sum(bool(r["gold_visited_not_observed"]) for r in valid),
-            "failure_categories": dict(Counter(
-                "candidate-generation" if r["gold_never_in_top12"] else
-                "selection-or-evidence" if r["gold_candidate_not_visited"] or r["gold_visited_not_observed"] else
-                "no-visible-attrition" for r in valid)),
+            # Failures are not mutually exclusive. A case can miss some
+            # gold files in retrieval and discard a different gold file
+            # during navigation; single-label precedence hides that fact.
+            "failure_categories": {
+                "candidate_generation": sum(bool(r["gold_never_in_top12"]) for r in valid),
+                "candidate_not_visited": sum(bool(r["gold_candidate_not_visited"]) for r in valid),
+                "visited_without_observed_evidence": sum(bool(r["gold_visited_not_observed"]) for r in valid),
+                "no_visible_attrition": sum(
+                    not (r["gold_never_in_top12"] or r["gold_candidate_not_visited"]
+                         or r["gold_visited_not_observed"]) for r in valid),
+            },
         },
         "note": "Post-hoc gold-only diagnostics; no gold in retrieval, Qwen or ranking.",
     }
