@@ -20,6 +20,10 @@ on:
       - "benchmark/inspect_candidates.py"
       - "benchmark/run.py"
       - "benchmark/rescore_existing.py"
+      - "benchmark/audit_retrieval_stages.py"
+      - "investigation_loop.py"
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
