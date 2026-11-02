@@ -225,7 +225,7 @@ def _query_vector(conn, embedder, query):
     if (config.get('model') != embedder.model or
             config.get('dimensions') != str(embedder.dimensions)):
         raise ValueError('Embedding model/dimension mismatch with DB')
-    vector = embedder.embed([query], query=True, keep_alive='0')[0]
+    vector = embedder.embed([query], query=True, keep_alive='5m')[0]
     return vector
 
 
