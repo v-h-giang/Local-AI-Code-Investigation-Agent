@@ -81,6 +81,9 @@ def audit(run_id, suite="repocontextbench"):
             "secondary_novel_hits": len((secondary - original) & gold),
             "visited_gold_hits": len(visited & gold),
             "observed_gold_hits": len(observed & gold),
+            "observed_gold_from_top12": len(observed & ranked_12 & gold),
+            "observed_gold_outside_top12": len((observed - ranked_12) & gold),
+            "visited_gold_outside_top12": len((visited - ranked_12) & gold),
             "gold_candidate_not_visited": sorted((ranked_12 & gold) - visited),
             "gold_visited_not_observed": sorted((visited & gold) - observed),
             "gold_never_in_top12": sorted(gold - ranked_12),
@@ -98,7 +101,8 @@ def audit(run_id, suite="repocontextbench"):
     totals = {key: sum(r[key] for r in valid) for key in
               ("candidate_at_8_hits", "candidate_at_12_hits", "original_all_hits",
                "secondary_hits", "secondary_novel_hits", "visited_gold_hits",
-               "observed_gold_hits")}
+               "observed_gold_hits", "observed_gold_from_top12",
+               "observed_gold_outside_top12", "visited_gold_outside_top12")}
     return {
         "run_id": run_id, "suite": suite, "cases": rows,
         "summary": {
@@ -107,6 +111,7 @@ def audit(run_id, suite="repocontextbench"):
             "recall_at_8": round(totals["candidate_at_8_hits"] / denominator, 4) if denominator else None,
             "recall_at_12": round(totals["candidate_at_12_hits"] / denominator, 4) if denominator else None,
             "observed_recall": round(totals["observed_gold_hits"] / denominator, 4) if denominator else None,
+            "observed_recall_outside_top12": round(totals["observed_gold_outside_top12"] / denominator, 4) if denominator else None,
             "cases_with_candidate_attrition": sum(bool(r["gold_candidate_not_visited"]) for r in valid),
             "cases_with_evidence_attrition": sum(bool(r["gold_visited_not_observed"]) for r in valid),
             # Failures are not mutually exclusive. A case can miss some
