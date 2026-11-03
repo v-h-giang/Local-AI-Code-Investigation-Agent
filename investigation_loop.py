@@ -379,20 +379,23 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
             prefetched=prefetch(repo,candidates[:8],question,max_chars=3000,limit=6)
             if not isinstance(prefetched,list):
                 prefetched=[]
-            prefetch_refs=_evidence_lines(prefetched)
-            if prefetched and prefetch_refs:
+            # The outer tool observation repeats citation metadata. If that
+            # overhead breaches the budget, drop whole trailing snippets;
+            # never truncate a line or discard every snippet unnecessarily.
+            while prefetched:
+                prefetch_refs=_evidence_lines(prefetched)
                 prefetch_item={'step':0,'tool':'prefetch_source',
                                'query':'','reason':'deterministic indexed evidence acquisition',
                                'observation':prefetched,'source_refs':prefetch_refs,
                                'confidence':'numbered source excerpts; no inferred spans'}
                 raw_prefetch=json.dumps(prefetch_item,ensure_ascii=False)
-                if len(raw_prefetch)<=3200:
+                if prefetch_refs and len(raw_prefetch)<=3200:
                     history.append(prefetch_item)
                     citations.extend(prefetch_refs)
                     spent+=len(raw_prefetch)
                     prefetch_chars=len(raw_prefetch)
-                else:
-                    prefetched=[]
+                    break
+                prefetched=prefetched[:-1]
         except (ValueError,TypeError,RuntimeError,KeyError,OSError) as exc:
             errors.append('Evidence prefetch: '+str(exc)[:150])
     # Prefetched source has already been read and exposed to the model.
