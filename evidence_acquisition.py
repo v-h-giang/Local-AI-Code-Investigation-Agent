@@ -75,6 +75,7 @@ def acquire_evidence(repo, candidates, question, max_chars=3600, limit=6, *,\n  
     """
     output=[]
     used=set()
+    llm_calls=0
     for candidate in candidates:
         if len(output)>=limit:
             break
@@ -105,7 +106,12 @@ def acquire_evidence(repo, candidates, question, max_chars=3600, limit=6, *,\n  
         # Reserve remaining budget for other files; never silently slice lines.
         remaining=max_chars-len(json.dumps(output,ensure_ascii=False))
         allowed=min(780,remaining-40)
-        from context_compression import compress\n        snippet=compress(path,numbered,question,allowed,mode=mode,llm=llm)
+        from context_compression import compress\n        # Keep expensive local LLM compression bounded: only the first two
+        # eligible candidate files use LLM selection or summarization.
+        use_llm=(llm if mode in ('c3','c4') and llm_calls<2 else None)
+        snippet=compress(path,numbered,question,allowed,mode=mode,llm=use_llm)
+        if use_llm is not None:
+            llm_calls+=1
         if snippet:
             next_output=output+[snippet]
             if len(json.dumps(next_output,ensure_ascii=False))<=max_chars:
