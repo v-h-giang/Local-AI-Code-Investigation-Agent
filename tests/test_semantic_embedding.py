@@ -209,7 +209,8 @@ class SemanticAgentWrapperTests(unittest.TestCase):
                 'investigation_loop':fake_loop}), \
              patch.object(semantic_retrieval,'hybrid_search',stub_hybrid):
             code=semantic_agent.main([
-                '--semantic-db',str(db),'--project','D:/repo','investigate','resume'])
+                '--semantic-db',str(db),'--semantic-mode','hybrid',
+                '--project','D:/repo','investigate','resume'])
         self.assertEqual(code,0)
         self.assertEqual(outcomes['hybrid'][0]['path'],'source.f90')
         self.assertEqual(outcomes['baseline'][0]['path'],'fallback.f90')
