@@ -69,7 +69,7 @@ def main(argv=None):
             raise SystemExit('Automatic semantic index recovery failed. '
                              'Check Ollama, installed embedding model, project '
                              'path and free disk space. Retry command: '
-                             +' '.join(cmd)) from exc
+                             +subprocess.list2cmdline(cmd)) from exc
         if not database.is_file():
             raise SystemExit('Semantic index recovery completed without database: '
                              +str(database))
