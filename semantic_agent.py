@@ -23,8 +23,11 @@ def main(argv=None):
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'))
     options.add_argument('--semantic-model',default='qwen3-embedding:0.6b')
     options.add_argument('--semantic-dimensions',type=int,default=1024)
-    options.add_argument('--compression-mode',choices=('c2','c3','c4','legacy'),
-                         default=os.environ.get('LOCAL_CODE_AGENT_COMPRESSION_MODE','c2'))
+    options.add_argument('--compression-mode',
+                         choices=('structure_mmr','llm_evidence_select',
+                                  'structure_llm_summary','legacy','c2','c3','c4'),
+                         default=os.environ.get('LOCAL_CODE_AGENT_COMPRESSION_MODE',
+                                                'structure_mmr'))
     settings,remaining = options.parse_known_args(args)
     import agent
     if 'investigate' not in remaining:
@@ -92,7 +95,7 @@ def main(argv=None):
 
     code_intelligence.search_file_candidates=semantic_search
     investigation_loop._validate_action=validate_with_embeddings
-    # C2 is the default for semantic agent; opt out to reproduce B/C0.
+    # structure_mmr is the default; disable prefetch to reproduce B/C0.
     # The configured local reasoning model is reused in C3/C4 (no new service).
     # The hook is an instance-local function installed before agent.main().
     if os.environ.get('LOCAL_CODE_AGENT_PREFETCH','1')=='1':
