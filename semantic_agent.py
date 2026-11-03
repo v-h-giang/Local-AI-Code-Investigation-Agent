@@ -90,6 +90,11 @@ def main(argv=None):
 
     code_intelligence.search_file_candidates=semantic_search
     investigation_loop._validate_action=validate_with_embeddings
+    # Disabled by default so earlier experiment B remains a valid control.
+    # Enable for experiment C1 with LOCAL_CODE_AGENT_PREFETCH=1.
+    if os.environ.get('LOCAL_CODE_AGENT_PREFETCH','0')=='1':
+        from evidence_acquisition import acquire_evidence
+        investigation_loop._evidence_prefetch=acquire_evidence
     return agent.main(remaining)
 
 
