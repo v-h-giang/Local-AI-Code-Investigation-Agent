@@ -23,6 +23,8 @@ def main(argv=None):
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'))
     options.add_argument('--semantic-model',default='qwen3-embedding:0.6b')
     options.add_argument('--semantic-dimensions',type=int,default=1024)
+    options.add_argument('--compression-mode',choices=('c2','c3','c4','legacy'),
+                         default=os.environ.get('LOCAL_CODE_AGENT_COMPRESSION_MODE','c2'))
     settings,remaining = options.parse_known_args(args)
     import agent
     if 'investigate' not in remaining:
@@ -90,11 +92,16 @@ def main(argv=None):
 
     code_intelligence.search_file_candidates=semantic_search
     investigation_loop._validate_action=validate_with_embeddings
-    # Disabled by default so earlier experiment B remains a valid control.
-    # Enable for experiment C1 with LOCAL_CODE_AGENT_PREFETCH=1.
-    if os.environ.get('LOCAL_CODE_AGENT_PREFETCH','0')=='1':
+    # C2 is the default for semantic agent; opt out to reproduce B/C0.
+    # The configured local reasoning model is reused in C3/C4 (no new service).
+    # The hook is an instance-local function installed before agent.main().
+    if os.environ.get('LOCAL_CODE_AGENT_PREFETCH','1')=='1':
         from evidence_acquisition import acquire_evidence
-        investigation_loop._evidence_prefetch=acquire_evidence
+        def prefetch(repo, candidates, question, *, max_chars=3000,
+                     limit=6, llm=None):
+            return acquire_evidence(repo,candidates,question,max_chars=max_chars,
+                                    limit=limit,mode=settings.compression_mode,llm=llm)
+        investigation_loop._evidence_prefetch=prefetch
     return agent.main(remaining)
 
 
