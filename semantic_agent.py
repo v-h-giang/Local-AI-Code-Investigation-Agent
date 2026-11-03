@@ -13,6 +13,7 @@ import argparse
 import os
 from pathlib import Path
 import sys
+import subprocess
 
 
 def main(argv=None):
@@ -35,14 +36,39 @@ def main(argv=None):
     database = settings.semantic_db or os.environ.get('LOCAL_CODE_AGENT_EMBEDDING_DB')
     if database is None:
         raise SystemExit('Embedding DB is required: --semantic-db or LOCAL_CODE_AGENT_EMBEDDING_DB')
-    database = Path(database).resolve()
-    if database.is_dir():
-        if '--project' not in remaining:
-            raise SystemExit('Missing --project for semantic DB directory resolution')
-        project = Path(remaining[remaining.index('--project')+1]).resolve()
+    database = Path(database).expanduser().resolve()
+    if '--project' not in remaining:
+        raise SystemExit('Missing --project: required to verify or rebuild semantic index')
+    project = Path(remaining[remaining.index('--project')+1]).expanduser().resolve()
+    if database.is_dir() or database.suffix.lower() != '.sqlite':
         database = database / (project.name + '.sqlite')
     if not database.is_file():
-        raise SystemExit('Embedding DB does not exist: ' + str(database))
+        # Reconstruct from the source, never from benchmark gold labels.
+        # semantic_retrieval.py also restores missing Code Intelligence first.
+        output = Path('output/architecture')
+        if '--out' in remaining:
+            output = Path(remaining[remaining.index('--out')+1])
+        intelligence = output.expanduser().resolve()/'middle-files'/'code_intelligence.sqlite'
+        host = remaining[remaining.index('--host')+1] if '--host' in remaining else 'http://127.0.0.1:11434'
+        cmd=[sys.executable,str(Path(__file__).resolve().parent/'semantic_retrieval.py'),
+             'index','--project',str(project),
+             '--intelligence-index',str(intelligence),'--db',str(database),
+             '--model',settings.semantic_model,
+             '--dimensions',str(settings.semantic_dimensions),'--host',host,
+             '--batch-size','8']
+        print('[Semantic] Missing embedding index: '+str(database),flush=True)
+        print('[Semantic] Auto rebuilding. Requires Ollama and embedding model: '
+              +settings.semantic_model,flush=True)
+        try:
+            subprocess.run(cmd,check=True)
+        except (OSError,subprocess.CalledProcessError) as exc:
+            raise SystemExit('Automatic semantic index recovery failed. '
+                             'Check Ollama, installed embedding model, project '
+                             'path and free disk space. Retry command: '
+                             +' '.join(cmd)) from exc
+        if not database.is_file():
+            raise SystemExit('Semantic index recovery completed without database: '
+                             +str(database))
 
     from semantic_retrieval import OllamaEmbedder, dense_search, hybrid_search
     from code_intelligence import search_file_candidates as original
