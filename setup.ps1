@@ -175,7 +175,22 @@ try {
     # The benchmark and semantic wrapper resolve the DB by the source repo name.
     $embeddingDirectory = Join-Path $repoRoot 'benchmark\results'
     New-Item -ItemType Directory -Force -Path $embeddingDirectory | Out-Null
-    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_EMBEDDING_DB' -Value $embeddingDirectory
+    # Repair the old tutorial's single-file setting after results/ was deleted.
+    # Preserve existing custom paths and valid existing files.
+    $configuredDB = [Environment]::GetEnvironmentVariable('LOCAL_CODE_AGENT_EMBEDDING_DB','Process')
+    if ([string]::IsNullOrWhiteSpace($configuredDB)) {
+        $configuredDB = [Environment]::GetEnvironmentVariable('LOCAL_CODE_AGENT_EMBEDDING_DB','User')
+    }
+    $oldTutorialFile = Join-Path $embeddingDirectory 'agent-framework.sqlite'
+    if (-not [string]::IsNullOrWhiteSpace($configuredDB) -and
+        $configuredDB -eq $oldTutorialFile -and
+        -not (Test-Path -LiteralPath $configuredDB)) {
+        Set-RecommendedEnv -Name 'LOCAL_CODE_AGENT_EMBEDDING_DB' -Value $embeddingDirectory
+        Write-Host '[Setup] Replaced missing tutorial DB file with stable embedding directory.'
+    }
+    else {
+        Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_EMBEDDING_DB' -Value $embeddingDirectory
+    }
     Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_SEMANTIC_MODE' -Value 'dense'
     Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_COMPRESSION_MODE' -Value 'structure_mmr'
     Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_PREFETCH' -Value '1'
