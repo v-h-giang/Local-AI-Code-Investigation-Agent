@@ -160,6 +160,32 @@ citations are taken from actually displayed, unchanged source lines.
 `structure_mmr` uses language-independent **structural heuristics**, not
 a complete AST parser. These modes have not yet been end-to-end benchmarked.
 
+## Benchmark disk space and clean rerun
+
+The benchmark runner now deletes each **private per-case copy** of
+`middle-files/code_intelligence.sqlite` after its case finishes. It retains
+the single suite-level `_prepared_indexes` master index, the Dense embedding
+SQLite DB, all case records, machine JSON, stdout/stderr and summary files.
+Use `--keep-case-index` only if you explicitly need per-case SQLite copies.
+
+After fixing source/tests, run a new experiment from the beginning with a
+**new run ID**, rather than resuming cases produced by older code:
+
+```powershell
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest tests.test_context_compression tests.test_evidence_acquisition tests.test_semantic_embedding tests.test_benchmark_cleanup -v
+$env:LOCAL_CODE_AGENT_EMBEDDING_DB = (Resolve-Path "benchmark\\results\\agent-framework.sqlite").Path
+$env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "dense"
+$env:LOCAL_CODE_AGENT_PREFETCH = "1"
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "structure_mmr"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id structure_mmr_nemotron_dense_clean --max-steps 4
+```
+
+The old `c1_nemotron_dense_prefetch` report is incomplete; do not mix
+completed old-case outputs with new source changes or compression settings.
+Run the same case set for each alternative compression mode and use distinct
+run IDs.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
