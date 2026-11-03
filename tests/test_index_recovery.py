@@ -61,12 +61,18 @@ class IndexRecoveryTests(unittest.TestCase):
             db.mkdir()
             fake_agent=types.ModuleType('agent')
             fake_agent.main=lambda argv:0
+            fake_ci=types.ModuleType('code_intelligence')
+            fake_ci.search_file_candidates=lambda *a,**k:[]
+            fake_loop=types.ModuleType('investigation_loop')
+            fake_loop._validate_action=lambda action:action
             calls=[]
             def fake_run(command,**kwargs):
                 calls.append(command)
                 Path(command[command.index('--db')+1]).touch()
                 return SimpleNamespace(returncode=0)
-            with patch.dict(sys.modules,{'agent':fake_agent}), \
+            with patch.dict(sys.modules,{'agent':fake_agent,
+                                         'code_intelligence':fake_ci,
+                                         'investigation_loop':fake_loop}), \
                  patch.dict(os.environ,{'LOCAL_CODE_AGENT_PREFETCH':'0'}), \
                  patch.object(semantic_agent.subprocess,'run',side_effect=fake_run):
                 # The semantic wrapper needs available imports to proceed.
