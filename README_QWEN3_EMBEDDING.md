@@ -145,7 +145,7 @@ Direct invocation also accepts
 To reproduce the original B run without evidence prefetch, set
 \`$env:LOCAL_CODE_AGENT_PREFETCH = "0"\`.
 
-For fairness, compare the same fixed dataset, model, retrieved index and
+C3/C4 cap additional LLM compression calls at two candidate files per question;\nremaining candidates use the deterministic C2 compressor.\n\nFor fairness, compare the same fixed dataset, model, retrieved index and
 context budgets; account for extra LLM calls and latency in C3/C4.
 \`c2\` uses structural *heuristics* across languages rather than a complete AST;
 this is not yet a compiler-accurate parse. These modes are experiments and
