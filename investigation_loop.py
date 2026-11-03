@@ -376,7 +376,7 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
     prefetch_chars=0
     if callable(prefetch):
         try:
-            prefetched=prefetch(repo,candidates[:8],question,max_chars=3000,limit=6)
+            prefetched=prefetch(repo,candidates[:8],question,max_chars=3000,limit=6,\n                                llm=llm)
             if not isinstance(prefetched,list):
                 prefetched=[]
             # The outer tool observation repeats citation metadata. If that
