@@ -89,5 +89,40 @@ class EvidenceAcquisitionTests(unittest.TestCase):
         self.assertEqual(len(self.repo.read_calls),1)
 
 
+    def test_investigation_prefetch_is_observed_without_spending_tool_step(self):
+        from unittest.mock import patch
+        import investigation_loop
+
+        class AnswerModel:
+            def call(self, messages, *, tools=False, num_predict=180, **kwargs):
+                if num_predict==180:
+                    return {"content":'{"action":"finish"}'}
+                return {"content":"Source contains checkpoint restoration."}
+
+        original_tool=investigation_loop._tool_execute
+        def fake_tool(repo, action):
+            if action["tool"]=="discover_files":
+                return {"candidates":[{"path":"impl0.f90",
+                    "line_start":1,"line_end":14,"file_role":"other","path_score":9}]}
+            if action["tool"]=="search":
+                return []
+            return original_tool(repo,action)
+
+        with patch.object(investigation_loop,"_tool_execute",fake_tool), \
+             patch.object(investigation_loop,"_evidence_prefetch",acquire_evidence,
+                          create=True):
+            result=investigation_loop.investigate_iteratively(
+                self.repo,"where is restore checkpoint",AnswerModel(),
+                {"queries":[],"symbols":[],"question":"where is restore checkpoint"},
+                max_steps=2,review_rounds=0)
+
+        self.assertGreater(result["prefetched_files"],0)
+        self.assertEqual(result["steps_used"],1)
+        self.assertEqual(result["steps"][0]["tool"],"prefetch_source")
+        self.assertTrue(result["source_citations"])
+        self.assertTrue(all(ref.startswith("impl0.f90:")
+                            for ref in result["source_citations"]))
+
+
 if __name__=="__main__":
     unittest.main()
