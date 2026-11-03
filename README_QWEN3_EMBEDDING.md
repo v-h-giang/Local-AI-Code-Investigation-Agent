@@ -93,7 +93,7 @@ py -3 -m unittest tests.test_evidence_acquisition tests.test_semantic_embedding 
 py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c1_nemotron_dense_prefetch --max-steps 4
 ```
 
-`LOCAL_CODE_AGENT_PREFETCH=0` (the default) keeps the original B behavior.
+`LOCAL_CODE_AGENT_PREFETCH=0` disables the default prefetch and reproduces the original B behavior.
 The reader processes up to the first eight ranked source candidates and prefetches
 up to six distinct files with valid indexed line windows. It reads original
 numbered source lines and compresses them **extractively** within a 3000-character
@@ -111,46 +111,54 @@ proof of answer correctness. Inspect per-case tool traces and manually score
 claim support. Consider a second experiment with structural passage reranking
 and claim verification only **after** C1 is measured.
 
-## Select compression mode (C2 by default)
+## Context compression modes (default: \`structure_mmr\`)
 
-The semantic-agent wrapper enables evidence prefetch by default. Compression
-modes can be selected with the dedicated CLI option or an environment variable:
+Compression is opt-in within the \`semantic_agent.py\` workflow; evidence
+prefetch is enabled by default there. Use stable, self-explanatory mode names
+for operational commands and run IDs:
 
-| Mode | Behavior |
+| Mode | Implementation |
 | --- | --- |
-| \`c2\` (default) | Structure-aware source windows, lexical MMR diversity, character-budgeted selection; no extra LLM calls |
-| \`c3\` | The same configured reasoning model selects actual source line IDs; invalid/malformed selection falls back to C2; original source text is never rewritten |
-| \`c4\` | C2 evidence plus a short **unverified** LLM semantic note if it fits the same budget; note does not create any citation |
-| \`legacy\` | Earlier per-line keyword-based compression, for controlled comparison |
+| \`structure_mmr\` **(default)** | Structural keyword grouping + maximal marginal relevance (MMR) + bounded source selection; deterministic, no additional LLM calls |
+| \`llm_evidence_select\` | Reuse the configured reasoning LLM to select existing numbered source lines; only original source text becomes evidence |
+| \`structure_llm_summary\` | Retain the \`structure_mmr\` source evidence and optionally append a short **unverified** LLM-generated semantic note if it fits the budget |
+| \`legacy\` | Earlier extractive line-scoring compressor, useful as a control |
 
-Examples (PowerShell, from repository root):
+For backward compatibility, the old experimental names are accepted as
+aliases: \`c2\` → \`structure_mmr\`, \`c3\` → \`llm_evidence_select\`,
+\`c4\` → \`structure_llm_summary\`. Prefer descriptive names in new
+scripts, run IDs, and automation tasks.
 
 \`\`\`powershell
 $env:LOCAL_CODE_AGENT_EMBEDDING_DB = (Resolve-Path "benchmark\results\agent-framework.sqlite").Path
 $env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "dense"
 $env:LOCAL_CODE_AGENT_PREFETCH = "1"
-$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "c2"
+
+# Default (no compression-mode variable required):
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "structure_mmr"
 py -3 -m unittest tests.test_context_compression tests.test_evidence_acquisition tests.test_semantic_embedding -v
-py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c2_nemotron_dense --max-steps 4
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id structure_mmr_nemotron_dense --max-steps 4
 
-$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "c3"
-py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c3_nemotron_dense --max-steps 4
+# Optional alternative: LLM selects evidence line IDs
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "llm_evidence_select"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id llm_evidence_select_nemotron_dense --max-steps 4
 
-$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "c4"
-py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c4_nemotron_dense --max-steps 4
+# Optional alternative: structural evidence plus LLM note
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "structure_llm_summary"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id structure_llm_summary_nemotron_dense --max-steps 4
 \`\`\`
 
-Direct invocation also accepts
-\`py -3 semantic_agent.py --compression-mode c3 --semantic-db <path> --project <path> investigate "question"\`.
-To reproduce the original B run without evidence prefetch, set
+Direct invocation also accepts:
+\`py -3 semantic_agent.py --compression-mode llm_evidence_select --semantic-db <path> --project <path> investigate "question"\`.
+
+To reproduce the earlier reasoning baseline without evidence prefetch, set
 \`$env:LOCAL_CODE_AGENT_PREFETCH = "0"\`.
 
-C3/C4 cap additional LLM compression calls at two candidate files per question;\nremaining candidates use the deterministic C2 compressor.\n\nFor fairness, compare the same fixed dataset, model, retrieved index and
-context budgets; account for extra LLM calls and latency in C3/C4.
-\`c2\` uses structural *heuristics* across languages rather than a complete AST;
-this is not yet a compiler-accurate parse. These modes are experiments and
-have no measured improvement over C1/B until the local benchmarks run.
-Evidence IDs remain tied to actually displayed, unchanged source lines.
+The LLM-assisted modes use at most two additional LLM compression calls per
+question; other candidates use deterministic structural compression. All
+citations are taken from actually displayed, unchanged source lines.
+\`structure_mmr\` uses language-independent **structural heuristics**, not
+a complete AST parser. These modes have not yet been end-to-end benchmarked.
 
 ## Limitations
 
