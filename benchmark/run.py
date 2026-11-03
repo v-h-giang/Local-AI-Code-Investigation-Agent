@@ -174,6 +174,17 @@ def install_case_index(index, case_folder):
     return destination
 
 
+def cleanup_case_index(case_folder):
+    """Remove only the per-case COPY of the intelligence index.
+
+    The shared _prepared_indexes index and separate embedding DB are never
+    removed. Call only after run_case wrote its machine/runner records.
+    """
+    destination = case_folder / 'middle-files' / 'code_intelligence.sqlite'
+    if destination.is_file():
+        destination.unlink()
+
+
 def valid_ref(project, ref):
     if not isinstance(ref, dict):
         return None
@@ -498,6 +509,9 @@ def main(argv=None):
     p.add_argument('--llm-timeout', type=int, default=240,
                    help='HTTP timeout for EACH Ollama /api/chat request (seconds; agent default 240)')
     p.add_argument('--run-id', default='baseline')
+    p.add_argument('--keep-case-index', action='store_true',
+                   help='Keep a private SQLite copy for each case (uses much more disk); '
+                        'default deletes per-case copies after cases finish')
     p.add_argument('--resume', action='store_true')
     p.add_argument('--retry-failed', action='store_true',
                    help='With --resume, rerun only failed cases lacking recoverable machine JSON')
@@ -579,6 +593,10 @@ def main(argv=None):
                                                 agent, run_dir, timeout=args.timeout)
         install_case_index(suite_index, run_dir / case['id'])
         result = run_case(case, projects[case['suite']], agent, run_dir, args)
+        # run_case persists runner_record.json, stdout and stderr before return.
+        # Deleting the private copy does not affect frozen source or indexes.
+        if not args.keep_case_index:
+            cleanup_case_index(run_dir / case['id'])
         records[case['id']] = result
         save_report(run_dir, list(records.values()), args, len(cases), cases=cases)
         detail = result.get('error') or result.get('cli_warning') or ''
