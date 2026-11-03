@@ -41,11 +41,15 @@ def _compress_window(path, numbered, question, max_chars):
     for idx in ranked:
         if idx not in choices and score(numbered[idx])>0 and len(choices)<10:
             choices.append(idx)
-    choices.sort()
+    # Greedy evidence selection must be ranked by information value, not
+    # ascending source line: otherwise early boilerplate can use the entire
+    # budget before the matched function appears.
+    priority=sorted(choices,key=lambda i:(
+        -score(numbered[i]), abs(i-anchor), i))
     kept=[]
-    for idx in choices:
+    for idx in priority:
         ln,raw=numbered[idx]
-        attempted=kept+[(ln,raw)]
+        attempted=sorted(kept+[(ln,raw)],key=lambda pair:pair[0])
         refs=[f'{path}:{line}' for line,_ in attempted]
         result={'path':path,'content':'\n'.join(text for _,text in attempted),
                 'source_refs':refs,'visible_refs':refs,
