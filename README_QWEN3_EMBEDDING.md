@@ -79,6 +79,38 @@ Build one embedding DB for each pinned benchmark repository (e.g. `agent-framewo
 
 For a strict baseline comparison, run **ordinary** `agent.py` with identical cases and budget. Never compare different selected case sets.
 
+## Experiment C1: bounded evidence prefetch and extractive compression
+
+The verified B control has 20 cases, 59 gold files and 99 gold spans; do not
+overwrite its results. For C1, keep the same model, pinned checkout, embedding
+index, question set and `--max-steps 4`. Enable the new *optional* reader:
+
+```powershell
+$env:LOCAL_CODE_AGENT_EMBEDDING_DB = (Resolve-Path "benchmark\\results\\agent-framework.sqlite").Path
+$env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "dense"
+$env:LOCAL_CODE_AGENT_PREFETCH = "1"
+py -3 -m unittest tests.test_evidence_acquisition tests.test_semantic_embedding -v
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c1_nemotron_dense_prefetch --max-steps 4
+```
+
+`LOCAL_CODE_AGENT_PREFETCH=0` (the default) keeps the original B behavior.
+The reader processes up to the first eight ranked source candidates and prefetches
+up to six distinct files with valid indexed line windows. It reads original
+numbered source lines and compresses them **extractively** within a 3000-character
+snippet budget (plus small metadata overhead), preferentially retaining keyword
+matches, declarations and nearby context. Omitted lines get **no citations**.
+This avoids an extra LLM summarization call that might fabricate or suppress code.
+A prefetched passage is included as a step-0 observation; it consumes prompt
+budget but not one of the four LLM-guided tool steps. A duplicate initial
+`search_file` probe for an already-prefetched file is skipped. The original
+`agent.py` is unaffected.
+
+Compare C1 against the existing `b_nemotron_dense` run using actual observed
+gold-file, gold-span and final-citation metrics. More observed code is not itself
+proof of answer correctness. Inspect per-case tool traces and manually score
+claim support. Consider a second experiment with structural passage reranking
+and claim verification only **after** C1 is measured.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
