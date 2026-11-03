@@ -368,6 +368,33 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
         return (action['tool'],action.get('query',''),action.get('direction','out'),
                 action.get('path',''),action.get('start_line',0),action.get('end_line',0))
     history=[];used=set();citations=[];errors=[];spent=0
+    # The semantic wrapper may install an opt-in deterministic reader. Existing
+    # agent.py remains unchanged when the hook is absent. Only source lines
+    # actually returned in compressed excerpts count as observations.
+    prefetch = globals().get('_evidence_prefetch')
+    prefetched=[]
+    prefetch_chars=0
+    if callable(prefetch):
+        try:
+            prefetched=prefetch(repo,candidates[:8],question,max_chars=3000,limit=6)
+            if not isinstance(prefetched,list):
+                prefetched=[]
+            prefetch_refs=_evidence_lines(prefetched)
+            if prefetched and prefetch_refs:
+                prefetch_item={'step':0,'tool':'prefetch_source',
+                               'query':'','reason':'deterministic indexed evidence acquisition',
+                               'observation':prefetched,'source_refs':prefetch_refs,
+                               'confidence':'numbered source excerpts; no inferred spans'}
+                raw_prefetch=json.dumps(prefetch_item,ensure_ascii=False)
+                if len(raw_prefetch)<=3200:
+                    history.append(prefetch_item)
+                    citations.extend(prefetch_refs)
+                    spent+=len(raw_prefetch)
+                    prefetch_chars=len(raw_prefetch)
+                else:
+                    prefetched=[]
+        except (ValueError,TypeError,RuntimeError,KeyError,OSError) as exc:
+            errors.append('Evidence prefetch: '+str(exc)[:150])
     # One file-scoped search per file: different queries into the same file
     # should not occupy repeated scarce LLM actions.
     inspected_paths=set()
@@ -432,7 +459,7 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
     # being fed back as if it were verified evidence.
     review_log=[]
     for review_number in range(max(0, min(2, int(review_rounds)))):
-        if not citations or len(history)>=max_steps:
+        if not citations or len([row for row in history if row.get('step')!=0])>=max_steps:
             break
         review_system = (
             'Act as a skeptical CODE EVIDENCE REVIEWER, not a code author. '
@@ -490,9 +517,13 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
             'candidate_probe_paths':candidate_probe_paths,
             'inspected_candidate_paths':sorted(inspected_paths),
             'plan':plan,'investigation_mode':'iterative-qwen-tools','steps':history,
-            'steps_used':len(history),'max_steps':max_steps,'source_citations':citations,
+            'steps_used':len([row for row in history if row.get('step')!=0]),
+            'max_steps':max_steps,'source_citations':citations,
             'review_log':review_log,
-            'tool_errors':errors,'estimated_tokens':(spent+3)//4,'token_budget':budget,
+            'tool_errors':errors,'prefetched_files':len(prefetched) if prefetch_chars else 0,
+            'prefetch_context_chars':prefetch_chars,
+            'tool_steps_used':len([row for row in history if row.get('step')!=0]),
+            'estimated_tokens':(spent+3)//4,'token_budget':budget,
             'note':'Static/heuristic evidence only; graph traversal is not confirmed runtime execution'}
     if not has_source:
         return dict(result,answer='Chưa tìm được bằng chứng source có vị trí file:line đủ để kết luận.',
