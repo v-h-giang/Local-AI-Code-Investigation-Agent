@@ -165,6 +165,62 @@ def ensure_intelligence_index(suite, project, agent, run_dir, timeout=1800):
     return index
 
 
+def ensure_semantic_embedding_index(project, intelligence_index, args, run_dir):
+    """Rebuild a missing per-repository Dense index before launching a case.
+
+    Existing embeddings are reused and never overwritten. Non-semantic agent
+    runs do not require Ollama embeddings. No benchmark gold data is consulted.
+    """
+    agent_name=Path(args.agent).name.lower()
+    if agent_name!='semantic_agent.py' or args.mode=='non-ai':
+        return None
+    configured=os.environ.get('LOCAL_CODE_AGENT_EMBEDDING_DB')
+    if configured:
+        base=Path(configured).expanduser().resolve()
+        if base.suffix.lower()=='.sqlite':
+            destination=base
+            expected=project.name+'.sqlite'
+            if destination.name!=expected:
+                raise RuntimeError('Semantic index path must match this benchmark repository: '
+                                   +expected+'; got '+str(destination)
+                                   +'. Set LOCAL_CODE_AGENT_EMBEDDING_DB to a DIRECTORY.')
+        else:
+            destination=base/(project.name+'.sqlite')
+    else:
+        destination=RESULTS/(project.name+'.sqlite')
+        os.environ['LOCAL_CODE_AGENT_EMBEDDING_DB']=str(RESULTS.resolve())
+    if destination.is_file():
+        try:
+            import sqlite3
+            with sqlite3.connect(destination.as_uri()+'?mode=ro',uri=True,timeout=2) as db:
+                metadata=dict(db.execute('SELECT key,value FROM meta'))
+                db.execute('SELECT 1 FROM chunks LIMIT 1').fetchone()
+            if metadata.get('root')!=str(project.resolve()):
+                raise RuntimeError('Dense embedding DB belongs to a different project: '
+                                   +str(destination)+'. Move/rename it and rebuild.')
+            return destination
+        except sqlite3.DatabaseError as exc:
+            raise RuntimeError('Dense embedding SQLite is corrupt: '+str(destination)
+                               +'. Preserve the file for inspection, then rename '
+                               'it and rerun benchmark.') from exc
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    command=[sys.executable,str(ROOT/'semantic_retrieval.py'),'index',
+             '--project',str(project),'--intelligence-index',str(intelligence_index),
+             '--db',str(destination),
+             '--model',os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL','qwen3-embedding:0.6b'),
+             '--dimensions',os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024'),
+             '--host',args.host,'--batch-size','8']
+    print('[Benchmark] Missing Dense embedding index. Rebuilding: '+str(destination),flush=True)
+    print('[Benchmark] Recovery command: '+' '.join(command),flush=True)
+    # Stream progress: rebuilding may take much longer than an individual case.
+    completed=subprocess.run(command,cwd=ROOT,env=child_environment())
+    if completed.returncode or not destination.is_file():
+        raise RuntimeError('Dense index rebuilding failed. Verify Ollama is running, '
+                           'model qwen3-embedding:0.6b is installed, and disk has '
+                           'enough free space. Retry: '+' '.join(command))
+    return destination
+
+
 def install_case_index(index, case_folder):
     """Private case index; avoids cross-case SQLite writes and shared output state."""
     destination = case_folder / 'middle-files' / 'code_intelligence.sqlite'
@@ -591,6 +647,7 @@ def main(argv=None):
                     'enable --allow-unsupported only for a diagnostic run.')
         suite_index = ensure_intelligence_index(case['suite'], projects[case['suite']],
                                                 agent, run_dir, timeout=args.timeout)
+        ensure_semantic_embedding_index(projects[case['suite']],suite_index,args,run_dir)
         install_case_index(suite_index, run_dir / case['id'])
         result = run_case(case, projects[case['suite']], agent, run_dir, args)
         # run_case persists runner_record.json, stdout and stderr before return.
