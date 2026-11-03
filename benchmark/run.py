@@ -211,13 +211,13 @@ def ensure_semantic_embedding_index(project, intelligence_index, args, run_dir):
              '--dimensions',os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024'),
              '--host',args.host,'--batch-size','8']
     print('[Benchmark] Missing Dense embedding index. Rebuilding: '+str(destination),flush=True)
-    print('[Benchmark] Recovery command: '+' '.join(command),flush=True)
+    print('[Benchmark] Recovery command: '+subprocess.list2cmdline(command),flush=True)
     # Stream progress: rebuilding may take much longer than an individual case.
     completed=subprocess.run(command,cwd=ROOT,env=child_environment())
     if completed.returncode or not destination.is_file():
         raise RuntimeError('Dense index rebuilding failed. Verify Ollama is running, '
                            'model qwen3-embedding:0.6b is installed, and disk has '
-                           'enough free space. Retry: '+' '.join(command))
+                           'enough free space. Retry: '+subprocess.list2cmdline(command))
     return destination
 
 
