@@ -67,7 +67,8 @@ def _compress_window(path, numbered, question, max_chars):
             'source_lines_considered':len(numbered)}
 
 
-def acquire_evidence(repo, candidates, question, max_chars=3600, limit=6, *,\n                     mode='structure_mmr', llm=None):
+def acquire_evidence(repo, candidates, question, max_chars=3600, limit=6, *,
+                     mode='structure_mmr', llm=None):
     """Read actual code at embedding hints, compress across multiple files.
 
     Only indexed candidate windows are eligible. Missing hints are ignored;
@@ -106,7 +107,8 @@ def acquire_evidence(repo, candidates, question, max_chars=3600, limit=6, *,\n  
         # Reserve remaining budget for other files; never silently slice lines.
         remaining=max_chars-len(json.dumps(output,ensure_ascii=False))
         allowed=min(780,remaining-40)
-        from context_compression import compress\n        # Keep expensive local LLM compression bounded: only the first two
+        from context_compression import compress
+        # Keep expensive local LLM compression bounded: only the first two
         # eligible candidate files use LLM selection or summarization.
         use_llm=(llm if mode in ('llm_evidence_select','structure_llm_summary','c3','c4') and llm_calls<2 else None)
         snippet=compress(path,numbered,question,allowed,mode=mode,llm=use_llm)
