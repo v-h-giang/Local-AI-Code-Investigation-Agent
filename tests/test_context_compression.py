@@ -76,6 +76,16 @@ class CompressionModesTests(unittest.TestCase):
                            FakeLLM('{"summary":"Invented","ids":["other.f90:999"]}'))
         self.assertEqual(result,expected)
 
+    def test_descriptive_modes_are_equivalent_to_older_aliases(self):
+        for name, old_name in (
+                ("structure_mmr","c2"),
+                ("llm_evidence_select","c3"),
+                ("structure_llm_summary","c4")):
+            result=compress("restore.f90",LINES,"restore checkpoint",mode=name)
+            self.check_evidence(result)
+            self.assertEqual(result,compress("restore.f90",LINES,
+                                             "restore checkpoint",mode=old_name))
+
     def test_default_and_legacy_modes_are_available(self):
         self.assertEqual(compress("restore.f90",LINES,"restore checkpoint"),
                          compress_c2("restore.f90",LINES,"restore checkpoint"))
