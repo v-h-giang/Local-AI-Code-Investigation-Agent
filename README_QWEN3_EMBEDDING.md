@@ -111,6 +111,47 @@ proof of answer correctness. Inspect per-case tool traces and manually score
 claim support. Consider a second experiment with structural passage reranking
 and claim verification only **after** C1 is measured.
 
+## Select compression mode (C2 by default)
+
+The semantic-agent wrapper enables evidence prefetch by default. Compression
+modes can be selected with the dedicated CLI option or an environment variable:
+
+| Mode | Behavior |
+| --- | --- |
+| \`c2\` (default) | Structure-aware source windows, lexical MMR diversity, character-budgeted selection; no extra LLM calls |
+| \`c3\` | The same configured reasoning model selects actual source line IDs; invalid/malformed selection falls back to C2; original source text is never rewritten |
+| \`c4\` | C2 evidence plus a short **unverified** LLM semantic note if it fits the same budget; note does not create any citation |
+| \`legacy\` | Earlier per-line keyword-based compression, for controlled comparison |
+
+Examples (PowerShell, from repository root):
+
+\`\`\`powershell
+$env:LOCAL_CODE_AGENT_EMBEDDING_DB = (Resolve-Path "benchmark\results\agent-framework.sqlite").Path
+$env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "dense"
+$env:LOCAL_CODE_AGENT_PREFETCH = "1"
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "c2"
+py -3 -m unittest tests.test_context_compression tests.test_evidence_acquisition tests.test_semantic_embedding -v
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c2_nemotron_dense --max-steps 4
+
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "c3"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c3_nemotron_dense --max-steps 4
+
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "c4"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id c4_nemotron_dense --max-steps 4
+\`\`\`
+
+Direct invocation also accepts
+\`py -3 semantic_agent.py --compression-mode c3 --semantic-db <path> --project <path> investigate "question"\`.
+To reproduce the original B run without evidence prefetch, set
+\`$env:LOCAL_CODE_AGENT_PREFETCH = "0"\`.
+
+For fairness, compare the same fixed dataset, model, retrieved index and
+context budgets; account for extra LLM calls and latency in C3/C4.
+\`c2\` uses structural *heuristics* across languages rather than a complete AST;
+this is not yet a compiler-accurate parse. These modes are experiments and
+have no measured improvement over C1/B until the local benchmarks run.
+Evidence IDs remain tied to actually displayed, unchanged source lines.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
