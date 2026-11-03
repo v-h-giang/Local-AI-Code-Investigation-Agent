@@ -186,6 +186,56 @@ completed old-case outputs with new source changes or compression settings.
 Run the same case set for each alternative compression mode and use distinct
 run IDs.
 
+## SQLite / knowledge base maintenance
+
+Storage is distributed across separate, local indexes:
+
+| Store | Default location | Contents |
+| --- | --- | --- |
+| Global programming knowledge | `%USERPROFILE%\\.local_code_agent\\knowledge\\global_code_knowledge.sqlite` | Versioned programming concepts and relations; override with `LOCAL_CODE_AGENT_KB_PATH` |
+| Project search index | `%USERPROFILE%\\.local_code_agent\\index\\*.sqlite` | Per-repository FTS search, rebuildable |
+| Code Intelligence | `output\\architecture\\middle-files\\code_intelligence.sqlite` (or `--out`) | Symbols, FTS, relationships and module information |
+| Dense embedding index | Explicit `--db`, or configured `LOCAL_CODE_AGENT_EMBEDDING_DB` | Code chunks and embedding vectors, potentially expensive to regenerate |
+| Benchmark master index | `benchmark\\results\\<run-id>\\_prepared_indexes\\...` | Cached master index |
+| Benchmark case index | `benchmark\\results\\<run-id>\\<case-id>\\middle-files\\code_intelligence.sqlite` | Temporary per-case SQLite copy |
+| Bundled knowledge packs | `knowledge\\packs\\*.json` | Versioned seed concepts (not removed by maintenance) |
+| Workflow output | `output\\architecture\\middle-files\\workflow\\` | State, audit, cached results (not removed by maintenance) |
+
+Use the new safe maintenance command. **Without `--apply`, it only reports
+paths, SQLite integrity/free pages, potential reclaimable space, and completed
+benchmark case copies.** With `--apply`, it executes `PRAGMA optimize` and
+`VACUUM` on available known SQLite databases when spare disk space permits,
+and removes **only** private benchmark SQLite copies that have a saved
+`runner_record.json` with `machine_result_available=true`. It does not
+delete any SQLite rows from canonical databases or erase knowledge.
+
+```powershell
+# Audit (no writes)
+py -3 maintenance.py
+
+# Free disk from completed-case index copies first, without VACUUM
+py -3 maintenance.py --apply --no-vacuum
+
+# After ensuring sufficient space and stopping the agent, optimize SQLite
+py -3 maintenance.py --apply --no-clean-copies
+
+# Override custom locations when needed
+py -3 maintenance.py --output "D:\\AgentOutput\\architecture" --embedding-db "D:\\AgentOutput\\qwen3_embed.sqlite"
+```
+
+If a database is currently in use, stop benchmark runs/agents before VACUUM.
+SQLite optimization requires temporary free disk space; the command skips
+VACUUM when free space is insufficient. For source-code changes, rerun the
+incremental indexer rather than trying to guess and delete individual rows.
+This is storage maintenance, **not** semantic deduplication or knowledge
+garbage collection.
+
+Run offline tests:
+
+```powershell
+py -3 -m unittest tests.test_maintenance -v
+```
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
