@@ -3,6 +3,7 @@
 [CmdletBinding()]
 param(
     [switch]$PullModel,
+    [switch]$PullEmbeddingModel,
     [switch]$WithTreeSitter,
     [switch]$RunTests,
     [ValidateSet('Auto','GPU','CPU','Skip')]
@@ -297,6 +298,17 @@ try {
             throw 'Ollama model download failed. Check the Ollama service and network.'
         }
     }
+    if ($PullEmbeddingModel) {
+        if (-not $ollamaCommand) {
+            throw 'Ollama is not installed or not on PATH. Install Ollama for Windows first.'
+        }
+        $embeddingTag = [Environment]::GetEnvironmentVariable('LOCAL_CODE_AGENT_SEMANTIC_MODEL','Process')
+        Write-Host "[Setup] Downloading embedding model $embeddingTag (explicitly requested) ..."
+        & ollama pull $embeddingTag
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Embedding model download failed. Check Ollama, network and the model tag.'
+        }
+    }
     elseif (-not $ollamaCommand) {
         Write-Warning 'Ollama was not found. Static analysis works without it; AI workflows need a running Ollama service and qwen3:8b.'
     }
@@ -314,6 +326,7 @@ try {
     Write-Host 'Optional activation: .\.venv\Scripts\Activate.ps1'
     Write-Host 'Backend override examples: .\setup.ps1 -OllamaMode CPU | .\setup.ps1 -OllamaMode GPU'
     Write-Host 'Restart Ollama after changing backend. ollama ps verifies actual CPU/GPU use.'
+    Write-Host 'To install the local embedding model once: .\setup.ps1 -PullEmbeddingModel'
 }
 finally {
     Pop-Location
