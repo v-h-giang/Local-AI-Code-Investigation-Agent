@@ -1,8 +1,8 @@
 """Switchable, provenance-preserving context compression for code investigation.
 
-C2: structural line groups + lexical MMR + bounded evidence selection.
-C3: LLM selects evidence IDs from actual source lines; never generates citations.
-C4: C2 evidence plus optional LLM-generated non-evidentiary summary.
+structure_mmr: structural line groups + lexical MMR + bounded selection.
+llm_evidence_select: LLM selects existing source line IDs.
+structure_llm_summary: structure_mmr evidence plus optional LLM note.
 
 All modes retain exact line-numbered source text. An LLM summary is not a
 source observation and is never promoted to the citation allowlist.
@@ -12,7 +12,11 @@ from __future__ import annotations
 import json
 import re
 
-MODES = ("c2", "c3", "c4", "legacy")
+MODE_ALIASES = {"c2": "structure_mmr",
+                "c3": "llm_evidence_select",
+                "c4": "structure_llm_summary"}
+MODES = ("structure_mmr", "llm_evidence_select", "structure_llm_summary",
+         "legacy", *MODE_ALIASES)
 _LINE = re.compile(r"^\s*(\d+)\s+\|\s")
 _DECL = re.compile(
     r"\b(?:def|class|subroutine|function|module|program|interface|"
@@ -224,14 +228,15 @@ def compress_c4(path, numbered, question, max_chars=780, llm=None):
             else excerpt)
 
 
-def compress(path, numbered, question, max_chars=780, mode="c2", llm=None):
+def compress(path, numbered, question, max_chars=780, mode="structure_mmr", llm=None):
     if mode not in MODES:
         raise ValueError("Unknown compression mode: "+str(mode))
+    mode=MODE_ALIASES.get(mode,mode)
     if mode=="legacy":
         from evidence_acquisition import _compress_window
         return _compress_window(path,numbered,question,max_chars)
-    if mode=="c2":
+    if mode=="structure_mmr":
         return compress_c2(path,numbered,question,max_chars)
-    if mode=="c3":
+    if mode=="llm_evidence_select":
         return compress_c3(path,numbered,question,max_chars,llm)
     return compress_c4(path,numbered,question,max_chars,llm)
