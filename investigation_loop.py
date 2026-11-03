@@ -395,6 +395,14 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
                     prefetched=[]
         except (ValueError,TypeError,RuntimeError,KeyError,OSError) as exc:
             errors.append('Evidence prefetch: '+str(exc)[:150])
+    # Prefetched source has already been read and exposed to the model.
+    # Avoid consuming scarce tool steps probing the same file again by default.
+    if prefetch_chars:
+        covered={item['path'] for item in prefetched if isinstance(item,dict)
+                 and isinstance(item.get('path'),str)}
+        actions=[action for action in actions
+                 if not (action.get('tool')=='search_file'
+                         and action.get('path') in covered)]
     # One file-scoped search per file: different queries into the same file
     # should not occupy repeated scarce LLM actions.
     inspected_paths=set()
