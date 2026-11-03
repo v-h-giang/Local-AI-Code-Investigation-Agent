@@ -236,6 +236,67 @@ Run offline tests:
 py -3 -m unittest tests.test_maintenance -v
 ```
 
+## Automatic setup and index recovery after deleting output/results
+
+The setup script now persists **default** local semantic settings (without
+overwriting deliberate existing overrides):
+
+| Environment setting | Default | Purpose |
+| --- | --- | --- |
+| `LOCAL_CODE_AGENT_EMBEDDING_DB` | Absolute `<repo>/benchmark/results` directory | Directory holding `<source-repo-name>.sqlite`; do not point to a deleted individual file |
+| `LOCAL_CODE_AGENT_SEMANTIC_MODE` | `dense` | Select Dense retrieval |
+| `LOCAL_CODE_AGENT_COMPRESSION_MODE` | `structure_mmr` | Default structural/MMR compression |
+| `LOCAL_CODE_AGENT_PREFETCH` | `1` | Read verified source excerpts before reasoning |
+| `LOCAL_CODE_AGENT_SEMANTIC_MODEL` | `qwen3-embedding:0.6b` | Embedding model used by benchmark auto-recovery |
+| `LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS` | `1024` | Expected embedding dimensionality |
+
+On Windows PowerShell:
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+.\setup.ps1 -PullEmbeddingModel
+py -3 -m unittest tests.test_index_recovery tests.test_semantic_embedding tests.test_context_compression -v
+```
+
+`setup.ps1` also retains its existing `-PullModel`, `-WithTreeSitter`,
+`-RunTests`, `-ProcessOnly` and `-OllamaMode` flags. Environment defaults
+persist at Windows User scope unless `-ProcessOnly` is supplied; open a fresh
+terminal after setup if necessary. `-PullEmbeddingModel` downloads the
+embedding model **only when explicitly requested**. It is not needed if
+the model has already been installed.
+
+**Recovery rules:** The benchmark runner automatically rebuilds the
+per-suite `code_intelligence.sqlite` when missing. For
+`--agent semantic_agent.py`, it also checks the Dense embedding index before
+each case, and generates `agent-framework.sqlite` (or `jdbi.sqlite`) from
+the pinned source checkout when missing. An existing matching Dense index is
+reused; an existing unreadable or project-mismatched index produces an
+actionable error rather than being silently overwritten. Direct calls to
+`semantic_agent.py investigate` also auto-rebuild missing Dense indexes;
+`semantic_retrieval.py index` rebuilds its missing Code Intelligence
+prerequisite from the supplied project and output location.
+
+If `output/` and `benchmark/results/` were deleted, the complete indexing
+pipeline can therefore recover on first use provided (1) source checkout is
+still present; (2) Ollama runs locally with the embedding model installed;
+(3) available disk space is sufficient. The first request may spend substantial
+time re-embedding all chunks. Existing custom paths are retained by setup;
+if an old custom environment variable points to a deleted file, correct it
+manually or rerun setup with that override cleared.
+
+Example fresh benchmark:
+
+```powershell
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id structure_mmr_fresh_01 --max-steps 4
+```
+
+This does not recover deleted **benchmark reports**, **knowledge-base JSON
+packs**, or user-authored content; it regenerates only reconstructible indexes.
+The global programming knowledge SQLite is initialized during setup from
+bundled packs, but those packs must remain available. Index rebuilds never use
+gold answer labels.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
