@@ -22,8 +22,12 @@ def main(argv=None):
     options.add_argument('--semantic-db')
     options.add_argument('--semantic-mode',choices=('hybrid','dense'),
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'))
-    options.add_argument('--semantic-model',default='qwen3-embedding:0.6b')
-    options.add_argument('--semantic-dimensions',type=int,default=1024)
+    options.add_argument('--semantic-model',
+                         default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL',
+                                                'qwen3-embedding:0.6b'))
+    options.add_argument('--semantic-dimensions',type=int,
+                         default=int(os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS',
+                                                    '1024')))
     options.add_argument('--compression-mode',
                          choices=('structure_mmr','llm_evidence_select',
                                   'structure_llm_summary','legacy','c2','c3','c4'),
