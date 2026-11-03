@@ -111,25 +111,25 @@ proof of answer correctness. Inspect per-case tool traces and manually score
 claim support. Consider a second experiment with structural passage reranking
 and claim verification only **after** C1 is measured.
 
-## Context compression modes (default: \`structure_mmr\`)
+## Context compression modes (default: `structure_mmr`)
 
-Compression is opt-in within the \`semantic_agent.py\` workflow; evidence
+Compression is opt-in within the `semantic_agent.py` workflow; evidence
 prefetch is enabled by default there. Use stable, self-explanatory mode names
 for operational commands and run IDs:
 
 | Mode | Implementation |
 | --- | --- |
-| \`structure_mmr\` **(default)** | Structural keyword grouping + maximal marginal relevance (MMR) + bounded source selection; deterministic, no additional LLM calls |
-| \`llm_evidence_select\` | Reuse the configured reasoning LLM to select existing numbered source lines; only original source text becomes evidence |
-| \`structure_llm_summary\` | Retain the \`structure_mmr\` source evidence and optionally append a short **unverified** LLM-generated semantic note if it fits the budget |
-| \`legacy\` | Earlier extractive line-scoring compressor, useful as a control |
+| `structure_mmr` **(default)** | Structural keyword grouping + maximal marginal relevance (MMR) + bounded source selection; deterministic, no additional LLM calls |
+| `llm_evidence_select` | Reuse the configured reasoning LLM to select existing numbered source lines; only original source text becomes evidence |
+| `structure_llm_summary` | Retain the `structure_mmr` source evidence and optionally append a short **unverified** LLM-generated semantic note if it fits the budget |
+| `legacy` | Earlier extractive line-scoring compressor, useful as a control |
 
 For backward compatibility, the old experimental names are accepted as
-aliases: \`c2\` → \`structure_mmr\`, \`c3\` → \`llm_evidence_select\`,
-\`c4\` → \`structure_llm_summary\`. Prefer descriptive names in new
+aliases: `c2` → `structure_mmr`, `c3` → `llm_evidence_select`,
+`c4` → `structure_llm_summary`. Prefer descriptive names in new
 scripts, run IDs, and automation tasks.
 
-\`\`\`powershell
+```powershell
 $env:LOCAL_CODE_AGENT_EMBEDDING_DB = (Resolve-Path "benchmark\results\agent-framework.sqlite").Path
 $env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "dense"
 $env:LOCAL_CODE_AGENT_PREFETCH = "1"
@@ -146,18 +146,18 @@ py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --mode
 # Optional alternative: structural evidence plus LLM note
 $env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "structure_llm_summary"
 py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id structure_llm_summary_nemotron_dense --max-steps 4
-\`\`\`
+```
 
 Direct invocation also accepts:
-\`py -3 semantic_agent.py --compression-mode llm_evidence_select --semantic-db <path> --project <path> investigate "question"\`.
+`py -3 semantic_agent.py --compression-mode llm_evidence_select --semantic-db <path> --project <path> investigate "question"`.
 
 To reproduce the earlier reasoning baseline without evidence prefetch, set
-\`$env:LOCAL_CODE_AGENT_PREFETCH = "0"\`.
+`$env:LOCAL_CODE_AGENT_PREFETCH = "0"`.
 
 The LLM-assisted modes use at most two additional LLM compression calls per
 question; other candidates use deterministic structural compression. All
 citations are taken from actually displayed, unchanged source lines.
-\`structure_mmr\` uses language-independent **structural heuristics**, not
+`structure_mmr` uses language-independent **structural heuristics**, not
 a complete AST parser. These modes have not yet been end-to-end benchmarked.
 
 ## Limitations
