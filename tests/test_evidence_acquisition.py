@@ -46,7 +46,13 @@ class EvidenceAcquisitionTests(unittest.TestCase):
         self.assertGreaterEqual(len(snippets),2)
         self.assertLessEqual(len(snippets),6)
         self.assertLessEqual(len(json.dumps(snippets,ensure_ascii=False)),3600)
-        self.assertEqual(len(self.repo.read_calls),len(snippets))
+        # Reading a candidate is not the same as admitting its excerpt:
+        # the context budget may reject a fully read, lower-ranked file.
+        self.assertGreaterEqual(len(self.repo.read_calls),len(snippets))
+        self.assertLessEqual(len(self.repo.read_calls),len(candidates))
+        read_paths={path for path,_,_ in self.repo.read_calls}
+        self.assertTrue({item["path"] for item in snippets}.issubset(read_paths))
+        self.assertEqual(len({item["path"] for item in snippets}),len(snippets))
         for snippet in snippets:
             lines = snippet["content"].splitlines()
             actual = [f"{snippet['path']}:{line.split(' | ',1)[0]}"
