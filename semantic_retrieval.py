@@ -473,7 +473,7 @@ def _cli(argv=None):
             completed=subprocess.run(command)
             if completed.returncode or not intelligence.is_file():
                 raise RuntimeError('Cannot reconstruct Code Intelligence index. '
-                                   'Run: '+' '.join(command))
+                                   'Run: '+subprocess.list2cmdline(command))
         result=index_project(repo,intelligence,args.db,embedder,
                              chunk_lines=args.chunk_lines,overlap=args.overlap,
                              batch_size=args.batch_size,max_files=args.max_files,
