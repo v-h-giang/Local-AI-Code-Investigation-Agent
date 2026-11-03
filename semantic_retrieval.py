@@ -457,7 +457,24 @@ def _cli(argv=None):
     if args.operation=='index':
         if not args.intelligence_index:
             p.error('--intelligence-index is required for indexing')
-        result=index_project(repo,args.intelligence_index,args.db,embedder,
+        intelligence=Path(args.intelligence_index).expanduser().resolve()
+        if not intelligence.is_file():
+            # Rebuild the prerequisite from the source repository itself.
+            # Keep the output layout compatible with agent.py intelligence.
+            print('[Semantic index] Missing Code Intelligence SQLite: '
+                  +str(intelligence),flush=True)
+            print('[Semantic index] Rebuilding from source: '+str(repo.root),flush=True)
+            # Use the existing index command to avoid assuming internal
+            # indexer API details. The standard output folder is its parent/parent.
+            import subprocess
+            output=intelligence.parent.parent
+            command=[sys.executable,str(Path(__file__).resolve().parent/'agent.py'),
+                     '--project',str(repo.root),'intelligence','--out',str(output)]
+            completed=subprocess.run(command)
+            if completed.returncode or not intelligence.is_file():
+                raise RuntimeError('Cannot reconstruct Code Intelligence index. '
+                                   'Run: '+' '.join(command))
+        result=index_project(repo,intelligence,args.db,embedder,
                              chunk_lines=args.chunk_lines,overlap=args.overlap,
                              batch_size=args.batch_size,max_files=args.max_files,
                              progress=lambda row:print(json.dumps(row,ensure_ascii=False),flush=True))
