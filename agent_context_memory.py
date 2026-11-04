@@ -18,11 +18,12 @@ def compact_history(history, *, max_chars=2600, recent=2):
     if not history:
         return [], {'compacted_steps':0,'prompt_chars':2}
     view=[]
-    # Keep latest observations with provenance, but respect hard prompt budget.
-    for row in history[-max(0,recent):]:
-        view.append(row)
-    if len(json.dumps(view,ensure_ascii=False,default=str))>max_chars:
-        view=[]
+    # Preserve the most recent full tool observation when possible. If the
+    # last two are too large, prefer one over dropping BOTH source excerpts.
+    for row in reversed(history[-max(0,recent):]):
+        candidate=[row]+view
+        if len(json.dumps(candidate,ensure_ascii=False,default=str))<=max_chars:
+            view=candidate
     old=history[:len(history)-len(view)]
     compact=[]
     for row in old:
