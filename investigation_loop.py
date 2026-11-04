@@ -570,7 +570,7 @@ def investigate_iteratively(repo,question,llm,plan,budget=2400,max_steps=4,plann
     unsupported=sorted(mentioned-set(citations))
     from claim_verification import audit_claims
     verify_enabled=os.environ.get('LOCAL_CODE_AGENT_CLAIM_AUDIT','0')=='1'
-    verification=(audit_claims(answer,citations) if verify_enabled
+    verification=(audit_claims(answer,citations,observations=history) if verify_enabled
                   else {'enabled':False,'semantic_entailment_verified':False})
     verification['enabled']=verify_enabled
     return dict(result,answer=answer,
