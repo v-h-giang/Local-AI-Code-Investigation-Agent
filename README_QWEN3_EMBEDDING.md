@@ -297,6 +297,54 @@ The global programming knowledge SQLite is initialized during setup from
 bundled packs, but those packs must remain available. Index rebuilds never use
 gold answer labels.
 
+## Comparing compression modes after the completed structure_mmr run
+
+The 20-case `structure_mmr_nemotron_dense_clean` result is already a
+historical measurement. **Do not modify or resume it with new code.**
+New benchmark runs now record `semantic_settings` (retrieval mode,
+compression mode, prefetch, embedding model and dimensions) inside
+`run_config.json`. They reject resume attempts with mismatching settings.
+Older run configs without this section are accepted for backward compatibility
+but print a warning; they cannot prove their original settings.
+
+`structure_llm_summary` now reserves a small slice of each source-excerpt
+budget for the unverified LLM note; if a note is invalid, the full original
+`structure_mmr` excerpt budget is restored. This is a code change, so do not
+compare it as if it were the prior C4 version.
+
+Run the unit tests first:
+
+```powershell
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest tests.test_context_compression tests.test_evidence_acquisition tests.test_index_recovery tests.test_semantic_embedding tests.test_benchmark_cleanup -v
+```
+
+Run **new** experiments under the same frozen source commit, embedding index,
+Nemotron model and maximum 4 tool steps:
+
+```powershell
+$env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "dense"
+$env:LOCAL_CODE_AGENT_PREFETCH = "1"
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "llm_evidence_select"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id llm_evidence_select_nemotron_dense_01 --max-steps 4
+
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "structure_llm_summary"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id structure_llm_summary_nemotron_dense_01 --max-steps 4
+```
+
+To verify each new run's saved configuration:
+
+```powershell
+Get-Content benchmark/results/llm_evidence_select_nemotron_dense_01/run_config.json
+Get-Content benchmark/results/structure_llm_summary_nemotron_dense_01/run_config.json
+```
+
+Compare gold-span hits, observed gold-file hits, validity, elapsed time,
+prefetched files and per-case answer grounding. Metrics alone do not prove
+final answer correctness; review the generated `review_template.csv`.
+The completed default-mode baseline was 21/99 gold spans and 23/59 gold files,
+20/20 successful runs, with 5534.19 seconds overall.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
