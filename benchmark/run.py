@@ -631,7 +631,9 @@ def main(argv=None):
             'compression_mode':os.environ.get('LOCAL_CODE_AGENT_COMPRESSION_MODE','structure_mmr'),
             'prefetch':os.environ.get('LOCAL_CODE_AGENT_PREFETCH','1'),
             'embedding_model':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL','qwen3-embedding:0.6b'),
-            'embedding_dimensions':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024')}
+            'embedding_dimensions':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024'),
+            'context_compaction':os.environ.get('LOCAL_CODE_AGENT_CONTEXT_COMPACTION','0'),
+            'claim_audit':os.environ.get('LOCAL_CODE_AGENT_CLAIM_AUDIT','0')}
     cfgfile = run_dir / 'run_config.json'
     if cfgfile.is_file():
         previous_config=json.loads(cfgfile.read_text(encoding='utf-8'))
