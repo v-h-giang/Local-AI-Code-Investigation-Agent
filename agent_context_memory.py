@@ -24,6 +24,8 @@ def compact_history(history, *, max_chars=2600, recent=2):
         candidate=[row]+view
         if len(json.dumps(candidate,ensure_ascii=False,default=str))<=max_chars:
             view=candidate
+        else:
+            break
     old=history[:len(history)-len(view)]
     compact=[]
     for row in old:
