@@ -197,6 +197,9 @@ try {
     Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_PREFETCH' -Value '1'
     Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_SEMANTIC_MODEL' -Value 'qwen3-embedding:0.6b'
     Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS' -Value '1024'
+    # Experimental features are opt-in to preserve the measured baseline.
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_CONTEXT_COMPACTION' -Value '0'
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_CLAIM_AUDIT' -Value '0'
     Write-Host '[Setup] Semantic indexes are recreated from source when missing.'
     Write-Host '[Setup] Automatic embedding rebuild requires local Ollama and qwen3-embedding:0.6b.'
 
