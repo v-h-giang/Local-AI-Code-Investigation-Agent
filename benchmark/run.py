@@ -620,10 +620,32 @@ def main(argv=None):
     run_dir.mkdir(parents=True, exist_ok=True)
     configuration = {'suite': args.suite, 'mode': args.mode, 'model': args.model, 'host': args.host,
                      'repository_commits': {suite: REPOS[suite][1] for suite in projects}}
+    # Persist retrieval/compression settings so runs cannot silently mix modes.
+    # Historical run configs lack this section: allow resuming their already
+    # recorded cases, but do not misrepresent them as newly audited configs.
+    if agent.name.lower()=='semantic_agent.py':
+        configuration['semantic_settings'] = {
+            'retrieval_mode':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'),
+            'compression_mode':os.environ.get('LOCAL_CODE_AGENT_COMPRESSION_MODE','structure_mmr'),
+            'prefetch':os.environ.get('LOCAL_CODE_AGENT_PREFETCH','1'),
+            'embedding_model':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL','qwen3-embedding:0.6b'),
+            'embedding_dimensions':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024')}
     cfgfile = run_dir / 'run_config.json'
     if cfgfile.is_file():
-        if json.loads(cfgfile.read_text(encoding='utf-8')) != configuration:
-            p.error('Cannot resume a run with changed model, suite, mode, or commit')
+        previous_config=json.loads(cfgfile.read_text(encoding='utf-8'))
+        if ('semantic_settings' not in previous_config
+                and 'semantic_settings' in configuration):
+            # Older semantic runs: no config fingerprint was recorded.
+            # Keep them resumable, but print the uncertainty explicitly.
+            basic=dict(configuration)
+            basic.pop('semantic_settings',None)
+            if previous_config!=basic:
+                p.error('Cannot resume with changed run configuration')
+            print('[Benchmark] WARNING: existing run lacks a recorded semantic '
+                  'configuration. Confirm settings match original run.',flush=True)
+        elif previous_config!=configuration:
+            p.error('Cannot resume a run with changed model, retrieval, '
+                    'compression, prefetch or repository commit')
     else:
         cfgfile.write_text(json.dumps(configuration, indent=2), encoding='utf-8')
     records = {}
