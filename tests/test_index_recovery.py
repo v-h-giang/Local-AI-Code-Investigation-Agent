@@ -1,6 +1,7 @@
 """Offline recovery regressions without a real Ollama model or source indexing."""
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -29,10 +30,11 @@ class IndexRecoveryTests(unittest.TestCase):
                 calls.append(command)
                 db=Path(command[command.index('--db')+1])
                 db.parent.mkdir(parents=True,exist_ok=True)
-                with sqlite3.connect(db) as conn:
-                    conn.execute('CREATE TABLE meta(key TEXT,value TEXT)')
-                    conn.execute('INSERT INTO meta VALUES (?,?)',('root',str(project.resolve())))
-                    conn.execute('CREATE TABLE chunks(path TEXT)')
+                with closing(sqlite3.connect(db)) as conn:
+                    with conn:
+                        conn.execute('CREATE TABLE meta(key TEXT,value TEXT)')
+                        conn.execute('INSERT INTO meta VALUES (?,?)',('root',str(project.resolve())))
+                        conn.execute('CREATE TABLE chunks(path TEXT)')
                 return SimpleNamespace(returncode=0)
             with patch.dict(os.environ,{'LOCAL_CODE_AGENT_EMBEDDING_DB':str(folder)}), \
                  patch.object(run.subprocess,'run',side_effect=fake_run):
