@@ -418,8 +418,63 @@ def _rrf(ranked_views, limit=20, rrf_k=40):
     return [info[path] for path in results[:max(1,min(50,int(limit)))]]
 
 
+def symbol_candidates(repo, question, limit=30):
+    """Grounded, exact symbol-name discovery from the existing SQLite index.
+
+    Navigation hints only, never source evidence. Query terms come from the
+    user question; no gold labels or model-supplied paths enter the index.
+    """
+    import re
+    from contextlib import closing
+    db=Path(getattr(repo,'intelligence_db',None) or
+            Path('output/architecture/middle-files/code_intelligence.sqlite'))
+    if not db.is_file():
+        return []
+    quoted=re.findall(r'[`"\']([A-Za-z_][A-Za-z_0-9]{2,79})[`"\']',question)
+    tokens=re.findall(r'\b[A-Za-z_][A-Za-z_0-9]{2,79}\b',question)
+    stop={'the','and','from','where','what','when','which','why','how','does',
+          'are','this','that','code','function','method','class','file','for',
+          'with','inside','implementation','return','value','source'}
+    terms=list(dict.fromkeys(t for t in quoted+tokens
+                             if t.lower() not in stop))[:12]
+    if not terms:
+        return []
+    try:
+        with closing(sqlite3.connect(db.resolve().as_uri()+'?mode=ro',
+                                     uri=True,timeout=2)) as conn:
+            conn.row_factory=sqlite3.Row
+            records=[]
+            for term in terms:
+                records.extend(conn.execute(
+                    'SELECT path,line,end_line,name,kind FROM symbols '
+                    'WHERE name=? COLLATE NOCASE LIMIT ?', (term,20)).fetchall())
+    except sqlite3.Error:
+        return []
+    result=[]
+    seen=set()
+    for hit in records:
+        path=hit['path']
+        line=hit['line']
+        if not isinstance(path,str) or not isinstance(line,int) or line<1:
+            continue
+        key=(path,line)
+        if key in seen:
+            continue
+        seen.add(key)
+        end=hit['end_line']
+        end=max(line,min(line+90,end)) if isinstance(end,int) else line
+        result.append({'path':path,'line_hint':line,'line_start':line,
+                       'line_end':end,'file_role':'implementation',
+                       'candidate_origin':'indexed-exact-symbol',
+                       'kind':'symbol-file-candidate','citation':False})
+        if len(result)>=limit:
+            break
+    return result
+
+
 def hybrid_search(repo, question, db, embedder, *, limit=20,
-                  lexical_search=None, source_search=None):
+                  lexical_search=None, source_search=None, include_symbols=False,
+                  symbol_search=None):
     """Independent BM25-file + BM25-line + dense views. Gold-blind RRF."""
     if lexical_search is None:
         from code_intelligence import search_file_candidates
@@ -430,8 +485,12 @@ def hybrid_search(repo, question, db, embedder, *, limit=20,
     lexical = lexical_search(repo,question,limit=40,strategy='v59')
     line_hits = source_search(repo,question,limit=30)
     dense = dense_search(repo,question,db,embedder,limit=60,per_file=1)
-    return _rrf([('filename',1.0,lexical),('fts-line',1.1,line_hits),
-                 ('dense',1.4,dense)],limit=limit)
+    views=[('filename',1.0,lexical),('fts-line',1.1,line_hits),
+           ('dense',1.4,dense)]
+    if include_symbols:
+        symbols=(symbol_search or symbol_candidates)(repo,question,limit=30)
+        views.append(('exact-symbol',1.3,symbols))
+    return _rrf(views,limit=limit)
 
 
 def _cli(argv=None):
