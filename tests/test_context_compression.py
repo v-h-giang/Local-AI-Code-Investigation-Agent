@@ -70,6 +70,15 @@ class CompressionModesTests(unittest.TestCase):
         self.assertTrue(set(result["source_refs"]).issubset({
             "restore.f90:"+str(n) for n,_ in LINES}))
 
+    def test_c4_reserves_budget_and_keeps_a_useful_note(self):
+        llm=FakeLLM('{"summary":"The checkpoint routine calls restore_state when restart is enabled.",'
+                    '"ids":["restore.f90:4"]}')
+        result=compress_c4("restore.f90",LINES,"restore checkpoint",780,llm)
+        self.check_evidence(result)
+        self.assertIn("semantic_note_unverified",result)
+        self.assertIn("checkpoint routine",result["semantic_note_unverified"])
+        self.assertEqual(llm.calls,1)
+
     def test_c4_rejects_invalid_summary_citations(self):
         expected=compress_c2("restore.f90",LINES,"restore checkpoint",780)
         result=compress_c4("restore.f90",LINES,"restore checkpoint",780,
