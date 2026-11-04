@@ -44,7 +44,7 @@ class AgentImprovementTests(unittest.TestCase):
     def test_claim_must_appear_in_numbered_source_observation(self):
         from claim_verification import audit_claims
         history=[{'observation':{'path':'code.f90',
-                                'content':'18 | call restore_state()\\n19 | return'}}]
+                                'content':'18 | call restore_state()\n19 | return'}}]
         report=audit_claims('The call occurs at code.f90:18.',
                             ['code.f90:18'],observations=history)
         self.assertEqual(report['claims'][0]['status'],
