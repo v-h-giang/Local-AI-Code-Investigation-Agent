@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -192,7 +193,8 @@ def ensure_semantic_embedding_index(project, intelligence_index, args, run_dir):
     if destination.is_file():
         try:
             import sqlite3
-            with sqlite3.connect(destination.as_uri()+'?mode=ro',uri=True,timeout=2) as db:
+            with closing(sqlite3.connect(destination.as_uri()+'?mode=ro',
+                                         uri=True,timeout=2)) as db:
                 metadata=dict(db.execute('SELECT key,value FROM meta'))
                 db.execute('SELECT 1 FROM chunks LIMIT 1').fetchone()
             if metadata.get('root')!=str(project.resolve()):
