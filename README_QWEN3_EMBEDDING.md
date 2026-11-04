@@ -345,6 +345,89 @@ final answer correctness; review the generated `review_template.csv`.
 The completed default-mode baseline was 21/99 gold spans and 23/59 gold files,
 20/20 successful runs, with 5534.19 seconds overall.
 
+## Experimental agent roadmap (2026-11)
+
+Three independent enhancements have been implemented **behind opt-in flags**
+on `feature/qwen3-embedding-retrieval`, not enabled in the existing benchmark
+baseline:
+
+1. **Hybrid + Symbol Retrieval**: `hybrid_symbol` adds exact, indexed SQLite
+   symbol-name matches as a fourth weighted RRF view alongside filename FTS,
+   source-line FTS and Dense. Paths and line ranges are *navigation hints*,
+   never automatically valid source evidence. Existing `hybrid` / `dense`
+   modes are unchanged.
+2. **Agent Memory / Context Compaction**:
+   `LOCAL_CODE_AGENT_CONTEXT_COMPACTION=1` compacts **prompt history**
+   into prior tool actions, queries and source reference IDs, preserving a
+   bounded recent observation. The returned full trace, original source and
+   citations remain unchanged. This is NOT persistent cross-session memory,
+   not OpenAI's opaque native compaction and not an LLM-generated summary.
+   Extend `--max-steps` to 8 or 12 to investigate its utility; baseline
+   remains 4.
+3. **Claim-level Verification, phase 1 (provenance audit)**:
+   `LOCAL_CODE_AGENT_CLAIM_AUDIT=1` identifies each apparent statement's
+   citations and distinguishes missing citations, invalid citations,
+   references not found in actually shown numbered source and citations
+   which exist but whose **semantic support remains unverified**. The
+   `claim_verification` object is an audit, NOT correctness scoring or
+   independently validated natural-language entailment.
+
+All experimental modes preserve the read-only source investigation contract
+and are recorded in new `run_config.json` files.
+
+### Safe offline tests
+
+```powershell
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest tests.test_agent_improvements tests.test_context_compression tests.test_evidence_acquisition tests.test_index_recovery tests.test_semantic_embedding -v
+```
+
+### A/B experiments — do not overwrite previous benchmark runs
+
+First isolate retrieval changes on the existing 4-step benchmark:
+
+```powershell
+$env:LOCAL_CODE_AGENT_SEMANTIC_MODE = "hybrid_symbol"
+$env:LOCAL_CODE_AGENT_CONTEXT_COMPACTION = "0"
+$env:LOCAL_CODE_AGENT_CLAIM_AUDIT = "0"
+$env:LOCAL_CODE_AGENT_COMPRESSION_MODE = "structure_mmr"
+$env:LOCAL_CODE_AGENT_PREFETCH = "1"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id hybrid_symbol_4step_01 --max-steps 4
+```
+
+Then measure compaction and provenance auditing separately on selected
+hard cases or the complete suite **with distinct run IDs**:
+
+```powershell
+$env:LOCAL_CODE_AGENT_CONTEXT_COMPACTION = "1"
+$env:LOCAL_CODE_AGENT_CLAIM_AUDIT = "1"
+py -3 benchmark/run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id hybrid_symbol_memory_audit_8step_01 --max-steps 8
+```
+
+Do not claim that the second result isolates memory improvements: it also
+changes tool-step budget. For causal comparison run an 8-step experiment
+with compaction OFF and matching other settings and source/model commits.
+Compare Recall@8, observed-file/span recall, citation validity, time,
+claim-audit statuses and separately human-scored answer correctness.
+
+### Outstanding work (not implemented or not yet validated)
+
+| Priority | Work | Status |
+| --- | --- | --- |
+| P0 | Analyze per-case retrieval, evidence and final-answer failures from three completed compression experiments | Pending artifact-level audit |
+| P1 | Hybrid + exact symbol RRF | Implemented experimentally, offline test added; 20-case validation pending |
+| P2 | Multi-step bounded prompt-history compaction | Implemented experimentally; long-step A/B and quality evaluation pending |
+| P3 | Claim-to-source provenance audit | Implemented phase 1; independent semantic entailment grading **not implemented** |
+| P4 | Query rewriting, cross-encoder / reranker, call-graph-aware follow-up | Planned, not implemented |
+| P5 | Stronger static dataflow/call graph with source-range proof | Planned |
+| P6 | Sandboxed optional dynamic tests and reproducible grading of answers | Planned |
+
+Historical results: Dense + `structure_mmr` 21/99 gold spans, 23/59 gold
+files, 5534.19 s; `llm_evidence_select` 21/99, 24/59, 5517.60 s;
+`structure_llm_summary` 20/99, 24/59, 5812.09 s. All three had valid
+citations and 20/20 completed cases. These are **evidence proxies** rather
+than answer-correctness rates.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
