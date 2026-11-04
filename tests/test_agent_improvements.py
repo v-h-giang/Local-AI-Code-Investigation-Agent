@@ -70,6 +70,16 @@ class AgentImprovementTests(unittest.TestCase):
             self.assertFalse(result[0]['citation'])
             self.assertEqual(symbol_candidates(repo,'unknown_method'),[])
 
+    def test_exact_symbol_hint_takes_priority_over_dense_same_file(self):
+        from semantic_retrieval import _rrf
+        rows=_rrf([
+            ('dense',1.4,[{'path':'code.f90','line_hint':200}]),
+            ('exact-symbol',1.3,[{'path':'code.f90','line_hint':18,
+                                  'line_start':18,'line_end':32}])
+        ])
+        self.assertEqual(rows[0]['line_hint'],18)
+        self.assertEqual(rows[0]['line_hint_source'],'exact-symbol')
+
     def test_hybrid_symbol_opt_in_preserves_base_search(self):
         repo=SimpleNamespace()
         def lexical(*args,**kwargs):return []
