@@ -214,18 +214,30 @@ def _grounded_summary(llm, path, excerpt, question):
 
 
 def compress_c4(path, numbered, question, max_chars=780, llm=None):
-    # Reserve room for the optional summary but do not reduce evidence
-    # solely to accommodate a potentially ungrounded LLM interpretation.
-    excerpt=compress_c2(path,numbered,question,max_chars)
-    if not excerpt or llm is None:
-        return excerpt
+    """Reserve actual context space for the LLM note, never fabricate evidence.
+
+    Previously C2 filled the entire budget and almost every LLM note was
+    silently dropped. A modest fixed reservation makes this a measurable mode.
+    If the model fails, restore the full C2 evidence budget.
+    """
+    if llm is None:
+        return compress_c2(path,numbered,question,max_chars)
+    reserved=min(240,max(0,max_chars//3))
+    excerpt=compress_c2(path,numbered,question,max_chars-reserved)
+    if not excerpt:
+        return compress_c2(path,numbered,question,max_chars)
     summary=_grounded_summary(llm,path,excerpt,question)
     if not summary:
-        return excerpt
-    # The summary is a navigation note, NEVER an independently citable fact.
+        return compress_c2(path,numbered,question,max_chars)
+    # The note is unverified narrative, not an independently citable source.
+    # Truncate ONLY the note, never the original source lines or references.
     candidate=dict(excerpt,semantic_note_unverified=summary)
-    return (candidate if len(json.dumps(candidate,ensure_ascii=False))<=max_chars
-            else excerpt)
+    while len(json.dumps(candidate,ensure_ascii=False))>max_chars and summary:
+        summary=summary[:-1]
+        candidate['semantic_note_unverified']=summary
+    if len(summary)<24:
+        return compress_c2(path,numbered,question,max_chars)
+    return candidate
 
 
 def compress(path, numbered, question, max_chars=780, mode="structure_mmr", llm=None):
