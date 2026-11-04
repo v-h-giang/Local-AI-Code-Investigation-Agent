@@ -403,7 +403,7 @@ def _rrf(ranked_views, limit=20, rrf_k=40):
             if item.get('file_role') and item['file_role']!='other':
                 row['file_role']=item['file_role']
             hint = item.get('line_hint', item.get('line'))
-            if isinstance(hint,int) and (name=='dense' or 'line_hint' not in row):
+            if isinstance(hint,int) and (name in ('dense','exact-symbol') or 'line_hint' not in row):
                 row['line_hint']=hint
                 row['line_start']=item.get('start_line',hint)
                 row['line_end']=item.get('end_line',hint)
