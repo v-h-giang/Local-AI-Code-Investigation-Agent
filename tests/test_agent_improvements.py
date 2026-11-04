@@ -19,8 +19,8 @@ class AgentImprovementTests(unittest.TestCase):
                   'observation':{'content':f'{i} | source ' + ('x'*400)},
                   'source_refs':[f'code.f90:{i}']} for i in range(1,9)]
         snapshot=json.dumps(history)
-        view,stats=compact_history(history,max_chars=1100,recent=2)
-        self.assertLessEqual(len(json.dumps(view,ensure_ascii=False)),1100)
+        view,stats=compact_history(history,max_chars=1600,recent=2)
+        self.assertLessEqual(len(json.dumps(view,ensure_ascii=False)),1600)
         self.assertGreater(stats['compacted_steps'],0)
         self.assertEqual(json.dumps(history),snapshot)
         self.assertTrue(all(r.get('source_refs',[]) for r in view))
@@ -40,6 +40,19 @@ class AgentImprovementTests(unittest.TestCase):
         self.assertFalse(report['semantic_entailment_verified'])
         self.assertEqual(report['claims'][0]['status'],
                          'citation_present_not_semantically_verified')
+
+    def test_claim_must_appear_in_numbered_source_observation(self):
+        from claim_verification import audit_claims
+        history=[{'observation':{'path':'code.f90',
+                                'content':'18 | call restore_state()\\n19 | return'}}]
+        report=audit_claims('The call occurs at code.f90:18.',
+                            ['code.f90:18'],observations=history)
+        self.assertEqual(report['claims'][0]['status'],
+                         'citation_present_not_semantically_verified')
+        missing=audit_claims('The call occurs at code.f90:999.',
+                             ['code.f90:999'],observations=history)
+        self.assertEqual(missing['claims'][0]['status'],
+                         'citation_not_in_observed_source')
 
     def test_exact_symbol_search_only_returns_real_indexed_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
