@@ -525,6 +525,49 @@ Interpretation:
 - Do not tune weights against the 20 gold cases and then claim a clean
   benchmark improvement; use held-out cases or independent validation.
 
+## Opt-in Symbol Confidence Gating (P1.1)
+
+The 20-case retrieval ablation found: Dense Recall@8=19/59,
+Hybrid=21/59 (35.59%), Hybrid+Exact Symbol=19/59.
+To isolate the noisy symbol boost, `hybrid_symbol_gated` is an **opt-in**
+experimental mode. Existing `dense`, `hybrid`, `hybrid_symbol`, and
+RRF weights are unchanged. Only the symbol candidate view changes:
+the gate accepts backtick identifiers, call syntax, snake_case,
+camelCase, and mixed-case abbreviations; excludes Markdown headings
+and generic prose terms. This deliberately favors precision over recall
+for natural-language descriptions of symbols.
+
+Run local regression tests, then a paired ablation (requires the existing
+Qwen3 embedding SQLite and local Ollama; no Nemotron generation):
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest tests.test_agent_improvements benchmark.tests.test_embedding_compare -v
+py -3 benchmark/embedding_compare.py `
+  --from-run hybrid_symbol_4step_01 `
+  --embed-db "benchmark/results/agent-framework.sqlite" `
+  --out "benchmark/results/_diagnostics/gated_symbol_ablation.json"
+```
+
+The output contains **five** arms including `hybrid_symbol_gated`.
+To send a compact summary to ChatGPT:
+
+```powershell
+$r = Get-Content "benchmark/results/_diagnostics/gated_symbol_ablation.json" -Raw | ConvertFrom-Json
+$r.summary | ConvertTo-Json -Depth 6
+```
+
+Decision criterion: gated symbol Recall@8 should recover at least
+21/59 gold files (35.59%), while tracking @20 and chunk overlap for
+regression. The exact result is unknown until the experiment executes.
+Do not tune gating using benchmark gold labels; validate on held-out
+repositories/cases before claiming generalization.
+
+To run the gate in a future end-to-end experiment, explicitly select
+`LOCAL_CODE_AGENT_SEMANTIC_MODE=hybrid_symbol_gated`. Do not alter
+`main` or claim evidence quality is verified from retrieval metrics.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
