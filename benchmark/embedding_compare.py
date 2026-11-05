@@ -12,7 +12,7 @@ import time
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-import run
+from benchmark import run
 from codebase import Repo
 from code_intelligence import search_file_candidates
 from semantic_retrieval import OllamaEmbedder,dense_search,symbol_candidates,_rrf
