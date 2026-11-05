@@ -16,6 +16,7 @@ from benchmark import run
 from codebase import Repo
 from code_intelligence import search_file_candidates
 from semantic_retrieval import OllamaEmbedder,dense_search,symbol_candidates,_rrf
+from scoped_symbol_resolution import scoped_symbol_resolve
 from code_intelligence import search_relevant_sources
 from contextlib import closing
 import sqlite3
@@ -105,7 +106,8 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
     cases=[c for c in run.read_cases() if c['suite']==suite
            and (not case_ids or c['id'] in case_ids)]
     result=[]
-    modes=('baseline','dense','hybrid','hybrid_symbol','hybrid_symbol_gated')
+    modes=('baseline','dense','hybrid','hybrid_symbol','hybrid_symbol_gated',
+           'hybrid_symbol_scoped')
     for case in cases:
         query=case['question']
         started=time.perf_counter()
@@ -123,6 +125,8 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
                     views+[('exact-symbol',1.3,symbols)],limit=30),
                 'hybrid_symbol_gated':_rrf(
                     views+[('exact-symbol',1.3,gated_symbols)],limit=30)}
+        ranked['hybrid_symbol_scoped']=scoped_symbol_resolve(
+            repo,query,ranked['hybrid'],limit=30)
         elapsed=time.perf_counter()-started
         # Gold is read only now, after all retrieval decisions.
         gold=case.get('gold_spans') or []
@@ -132,6 +136,7 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
         hybrid=variants['hybrid']
         with_symbol=variants['hybrid_symbol']
         gated=variants['hybrid_symbol_gated']
+        scoped=variants['hybrid_symbol_scoped']
         dense_eval=variants['dense']
         result.append({
             'id':case['id'],'question':query,
@@ -179,6 +184,25 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
                     set(hybrid['chunk_span_overlap_ids_at_20'])-
                     set(gated['chunk_span_overlap_ids_at_20'])),
             },
+            'scoped_vs_hybrid':{
+                'new_gold_files_at_8':sorted(
+                    set(scoped['gold_files_at_8'])-set(hybrid['gold_files_at_8'])),
+                'lost_gold_files_at_8':sorted(
+                    set(hybrid['gold_files_at_8'])-set(scoped['gold_files_at_8'])),
+                'new_chunk_overlap_ids':sorted(
+                    set(scoped['chunk_span_overlap_ids_at_20'])-
+                    set(hybrid['chunk_span_overlap_ids_at_20'])),
+                'lost_chunk_overlap_ids':sorted(
+                    set(hybrid['chunk_span_overlap_ids_at_20'])-
+                    set(scoped['chunk_span_overlap_ids_at_20'])),
+                'new_top8_paths':sorted(
+                    set(scoped['top_files'])-set(hybrid['top_files'])),
+                'displaced_top8_paths':sorted(
+                    set(hybrid['top_files'])-set(scoped['top_files'])),
+                'scoped_hinted_files_at_8':sum(
+                    bool(row.get('symbol_hints'))
+                    for row in ranked['hybrid_symbol_scoped'][:8]),
+            },
             'dense_to_hybrid':{
                 'new_gold_files_at_8':sorted(
                     set(hybrid['gold_files_at_8']) -
@@ -215,6 +239,12 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
         'hybrid_to_symbol_gold_file_loss_cases':sum(
             bool(x['hybrid_to_symbol']['lost_gold_files_at_8']) for x in result),
         'total_retrieval_seconds':round(sum(x['seconds'] for x in result),3),
+        'scoped_gold_file_gain_cases':sum(
+            bool(x['scoped_vs_hybrid']['new_gold_files_at_8']) for x in result),
+        'scoped_gold_file_loss_cases':sum(
+            bool(x['scoped_vs_hybrid']['lost_gold_files_at_8']) for x in result),
+        'scoped_cases_with_hints_at_8':sum(
+            bool(x['scoped_vs_hybrid']['scoped_hinted_files_at_8']) for x in result),
         'gated_symbol_match_cases':sum(bool(x['symbol_diagnostics']['gated_match_count'])
                                         for x in result),
     }
@@ -225,6 +255,7 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
                       'generative_llm_calls':0,
                       'reuse_identical_ranked_views':True,
                       'symbol_gate_only_changes_exact_symbol_view':True,
+                      'scoped_mode_uses_existing_hybrid_ranking':True,
                       'frozen_source_commit':run.REPOS[suite][1]},
             'note':'Gold-blind ranking; chunk overlap is a retrieval bound, NOT '
                    'observed evidence recall, citation validity or answer correctness.'}
