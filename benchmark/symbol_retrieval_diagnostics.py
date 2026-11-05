@@ -164,7 +164,7 @@ def analyze_case(case, project, baseline, variant, matched_symbols):
     }
 
 
-def diagnose(baseline_id, variant_id, suite="repocontextbench", case_ids=()):
+def diagnose(baseline_id, variant_id, suite="repocontextbench", case_ids=(), intelligence_index=None):
     run.check_run_id(baseline_id)
     run.check_run_id(variant_id)
     base_dir = run.RESULTS / baseline_id
@@ -195,7 +195,8 @@ def diagnose(baseline_id, variant_id, suite="repocontextbench", case_ids=()):
         raise FileNotFoundError("Frozen source checkout missing: " + str(checkout))
     if run.git("rev-parse", "HEAD", cwd=checkout) != run.REPOS[suite][1]:
         raise RuntimeError("Frozen source checkout is not at expected commit")
-    index = variant_dir / "_prepared_indexes" / suite / "middle-files" / "code_intelligence.sqlite"
+    index = (Path(intelligence_index).expanduser().resolve() if intelligence_index else
+             variant_dir / "_prepared_indexes" / suite / "middle-files" / "code_intelligence.sqlite")
     if not index.is_file():
         raise FileNotFoundError(
             "Symbol SQLite missing: " + str(index) +
@@ -257,9 +258,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     # Optional external path is strictly for diagnostic symbol inventory.
     # Do not write to or update the index here.
-    if args.intelligence_index:
-        raise SystemExit("--intelligence-index is not yet supported; use the stored variant index")
-    report = diagnose(args.baseline, args.variant, args.suite, args.case_id)
+    report = diagnose(args.baseline, args.variant, args.suite, args.case_id,
+                      intelligence_index=args.intelligence_index)
     out = args.out or (run.RESULTS / "_diagnostics" /
                        (args.baseline + "__vs__" + args.variant + ".json"))
     out.parent.mkdir(parents=True, exist_ok=True)
