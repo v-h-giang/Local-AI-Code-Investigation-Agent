@@ -20,7 +20,7 @@ def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
     options = argparse.ArgumentParser(add_help=False)
     options.add_argument('--semantic-db')
-    options.add_argument('--semantic-mode',choices=('hybrid','dense','hybrid_symbol','hybrid_symbol_gated'),
+    options.add_argument('--semantic-mode',choices=('hybrid','dense','hybrid_symbol','hybrid_symbol_gated','hybrid_symbol_scoped'),
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'))
     options.add_argument('--semantic-model',
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL',
@@ -74,7 +74,7 @@ def main(argv=None):
             raise SystemExit('Semantic index recovery completed without database: '
                              +str(database))
 
-    from semantic_retrieval import OllamaEmbedder, dense_search, hybrid_search
+    from semantic_retrieval import OllamaEmbedder, dense_search, hybrid_search, scoped_hybrid_search
     from code_intelligence import search_file_candidates as original
     import code_intelligence
     import investigation_loop
@@ -97,6 +97,9 @@ def main(argv=None):
                    'line_hint':item['line_hint'],
                    'line_start':item['start_line'], 'line_end':item['end_line']}
                   for item in matches]
+        elif settings.semantic_mode=='hybrid_symbol_scoped':
+            rows=scoped_hybrid_search(repo,query,database,embedder,limit=limit,
+                                      lexical_search=original)
         else:
             rows=hybrid_search(repo,query,database,embedder,limit=limit,
                                lexical_search=original,
