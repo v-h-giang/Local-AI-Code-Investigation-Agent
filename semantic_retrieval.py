@@ -520,6 +520,21 @@ def hybrid_search(repo, question, db, embedder, *, limit=20,
     return _rrf(views,limit=limit)
 
 
+def scoped_hybrid_search(repo, question, db, embedder, *, limit=20,
+                         lexical_search=None, source_search=None):
+    """Experimental hybrid-first scoped symbol navigation; no ranking boost.
+
+    This is a separate mode: existing Dense/Hybrid/Symbol logic is unchanged.
+    """
+    from scoped_symbol_resolution import scoped_symbol_resolve
+
+    base=hybrid_search(repo,question,db,embedder,
+                       limit=max(30,limit),
+                       lexical_search=lexical_search,
+                       source_search=source_search)
+    return scoped_symbol_resolve(repo,question,base,limit=limit)
+
+
 def _cli(argv=None):
     from codebase import Repo
     p=argparse.ArgumentParser(description=__doc__)
