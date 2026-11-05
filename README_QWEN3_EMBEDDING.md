@@ -473,6 +473,58 @@ Hybrid+Symbol = 18/99 spans, 21/59 files, 4417.11 s.
 Recall@8 = 32.20% both. This is not enough to blame any individual ranking
 stage; inspect per-case diagnostic records first.
 
+## P1 retrieval ablation: isolate FTS and Exact Symbol
+
+The completed 20-case experiment recorded 21/99 Dense gold spans versus
+18/99 Hybrid+Symbol gold spans, but that end-to-end comparison changed
+**both** the lexical hybrid views and symbol matching. To isolate the
+retrieval-stage effects without expensive reasoning-model calls, use the
+updated four-arm offline `benchmark/embedding_compare.py`.
+
+This mode runs **one local Ollama embedding inference per question**, not
+Nemotron. It reads the existing pinned Qwen3 embedding SQLite and the
+saved run's Code Intelligence SQLite; it does not reindex or retrain.
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_embedding_compare -v
+
+# Inspect existing embedding-index locations; choose the SQLite DB
+# previously used by semantic_agent.py, not the intelligence index.
+Get-ChildItem benchmark,output -Recurse -Filter *.sqlite |
+  Select-Object FullName
+
+# Use the SAME embedding DB as hybrid_symbol_4step_01:
+$db = $env:LOCAL_CODE_AGENT_EMBEDDING_DB
+py -3 benchmark/embedding_compare.py `
+  --from-run hybrid_symbol_4step_01 `
+  --embed-db "$db" `
+  --out benchmark/results/_diagnostics/dense_hybrid_symbol_ablation.json
+```
+
+If `$env:LOCAL_CODE_AGENT_EMBEDDING_DB` is empty or points to a directory,
+provide the full exact path to the embedding SQLite. The code validates that
+the index belongs to the pinned source root and that model/dimensions match.
+
+The report contains per-case top-8 ranks, `retrieval_views`, actual matched
+symbol names from SQLite (diagnostic only), exact-symbol gold-file overlap,
+line-window overlap, `dense_to_hybrid` and `hybrid_to_symbol` deltas.
+It is **not** final evidence or answer accuracy. Gold spans are accessed
+only after all retrieval rankings are generated. Existing model and
+retrieval algorithms remain untouched; the branch's `main` remains
+unmodified.
+
+Interpretation:
+- If `hybrid` degrades relative to `dense`, investigate filename/FTS
+  fusion before attributing loss to symbols.
+- If `hybrid_symbol` degrades relative to `hybrid`, investigate common
+  symbol names, missing module/language scope, and symbol-hint priority.
+- If retrieved gold-file recall improves but final observed/cited span
+  recall degrades, diagnose evidence acquisition and tool-step allocation.
+- Do not tune weights against the 20 gold cases and then claim a clean
+  benchmark improvement; use held-out cases or independent validation.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
