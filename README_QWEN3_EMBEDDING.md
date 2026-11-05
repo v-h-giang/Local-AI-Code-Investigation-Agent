@@ -568,6 +568,46 @@ To run the gate in a future end-to-end experiment, explicitly select
 `LOCAL_CODE_AGENT_SEMANTIC_MODE=hybrid_symbol_gated`. Do not alter
 `main` or claim evidence quality is verified from retrieval metrics.
 
+## P1.2 Hybrid-first Scoped Symbol Resolution (experimental)
+
+The 20 RepoContextBench natural-language cases gave gated symbol retrieval 21/59
+gold files at top 8, identical to Hybrid, with zero gated symbol matches.
+This is a no-regression result, NOT a symbol-retrieval improvement.
+
+New opt-in mode: `hybrid_symbol_scoped`. It uses the existing Hybrid ranking
+unchanged and annotates matching multi-token symbol names inside its top 12
+files (existing read-only SQLite). Explicit code identifiers may rescue up
+to two unambiguous definition paths; explicit Python/.NET/Fortran query
+scope restricts eligible paths. Heading-only names are ignored.
+Natural-language symbol hints do not change rankings or Dense line windows.
+They are navigation hints only, not evidence/citations; the acquisition
+compressor does not yet consume these annotations.
+
+Tests (no Ollama):
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_scoped_symbol_resolution `
+  benchmark.tests.test_embedding_compare tests.test_agent_improvements -v
+```
+
+Paired offline retrieval run (one Qwen3 Embedding call per case; no Nemotron):
+
+```powershell
+py -3 benchmark/embedding_compare.py `
+  --from-run hybrid_symbol_4step_01 `
+  --embed-db "benchmark/results/agent-framework.sqlite" `
+  --out "benchmark/results/_diagnostics/scoped_symbol_ablation.json"
+$r = Get-Content "benchmark/results/_diagnostics/scoped_symbol_ablation.json" -Raw | ConvertFrom-Json
+$r.summary | ConvertTo-Json -Depth 6
+```
+
+The report contains a sixth arm: `hybrid_symbol_scoped`, with additional
+`scoped_vs_hybrid` per-case deltas. The target control remains Hybrid
+file recall@8=21/59 (35.59%); Dense retains stronger top-20 coverage.
+Do not interpret candidate overlap as observed/cited gold evidence.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
