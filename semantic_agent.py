@@ -20,7 +20,7 @@ def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
     options = argparse.ArgumentParser(add_help=False)
     options.add_argument('--semantic-db')
-    options.add_argument('--semantic-mode',choices=('hybrid','dense','hybrid_symbol'),
+    options.add_argument('--semantic-mode',choices=('hybrid','dense','hybrid_symbol','hybrid_symbol_gated'),
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'))
     options.add_argument('--semantic-model',
                          default=os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL',
@@ -100,7 +100,8 @@ def main(argv=None):
         else:
             rows=hybrid_search(repo,query,database,embedder,limit=limit,
                                lexical_search=original,
-                               include_symbols=(settings.semantic_mode=='hybrid_symbol'))
+                               include_symbols=settings.semantic_mode.startswith('hybrid_symbol'),
+                               symbol_confidence_gate=(settings.semantic_mode=='hybrid_symbol_gated'))
         for item in rows:
             if isinstance(item.get('line_hint'),int) and item.get('path') not in line_windows:
                 line_windows[item['path']]=(int(item.get('line_start',item['line_hint'])),
