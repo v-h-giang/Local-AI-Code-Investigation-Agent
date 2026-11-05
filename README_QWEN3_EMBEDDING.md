@@ -428,6 +428,51 @@ files, 5534.19 s; `llm_evidence_select` 21/99, 24/59, 5517.60 s;
 citations and 20/20 completed cases. These are **evidence proxies** rather
 than answer-correctness rates.
 
+## Offline diagnosis after the Hybrid Symbol 20-case run
+
+Before changing RRF weights or running 8-step Nemotron, compare the saved
+`structure_mmr_nemotron_dense_clean` and `hybrid_symbol_4step_01`
+investigation records. The following command uses **no inference model**,
+does **not** rerun retrieval and does **not** modify source or benchmark
+results:
+
+```powershell
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_symbol_retrieval_diagnostics -v
+py -3 benchmark/symbol_retrieval_diagnostics.py `
+  --baseline structure_mmr_nemotron_dense_clean `
+  --variant hybrid_symbol_4step_01 `
+  --out benchmark/results/_diagnostics/dense_vs_hybrid_symbol.json
+```
+
+The console prints the diagnostic summary, and `dense_vs_hybrid_symbol.json`
+contains all 20 case records, top-8 file differences, exact symbol inventory
+matches, ranked symbol candidates, observed and final evidence hits, and
+non-causal diagnostic flags. **Gold evidence is only read after the archived
+run results, for scoring.** No label information influences the agent.
+
+If the pinned Code Intelligence SQLite was deleted, rebuild a dedicated
+read-only diagnostic index first:
+
+```powershell
+py -3 agent.py --project benchmark/repositories/agent-framework intelligence --out benchmark/results/diagnostic-index
+py -3 benchmark/symbol_retrieval_diagnostics.py `
+  --baseline structure_mmr_nemotron_dense_clean `
+  --variant hybrid_symbol_4step_01 `
+  --intelligence-index benchmark/results/diagnostic-index/middle-files/code_intelligence.sqlite
+```
+
+The index rebuild only scans the frozen source checkout; it does not rerun
+the expensive model inference. Old per-case machine JSON and runner records
+must still be available. The tool refuses to compare different model/repo
+commits and surfaces missing files explicitly.
+
+**Known observed baseline before case diagnostics:**
+Dense + Structure MMR = 21/99 spans, 23/59 files, 5534.19 s;
+Hybrid+Symbol = 18/99 spans, 21/59 files, 4417.11 s.
+Recall@8 = 32.20% both. This is not enough to blame any individual ranking
+stage; inspect per-case diagnostic records first.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
