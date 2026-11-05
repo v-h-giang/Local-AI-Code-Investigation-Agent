@@ -418,7 +418,24 @@ def _rrf(ranked_views, limit=20, rrf_k=40):
     return [info[path] for path in results[:max(1,min(50,int(limit)))]]
 
 
-def symbol_candidates(repo, question, limit=30):
+def _high_confidence_symbol_terms(question):
+    """Deterministic, conservative symbol intents; no index or gold labels.
+
+    Ordinary title-case words such as Agent, Run, Python and Should are not
+    symbol intents without an explicit code delimiter / call syntax.
+    """
+    quoted=re.findall(r'[`]([A-Za-z_][A-Za-z_0-9]{2,79})[`]',question)
+    called=re.findall(r'(?<![A-Za-z_0-9])([A-Za-z_][A-Za-z_0-9]{2,79})\\s*\\(',question)
+    identifiers=re.findall(r'\\b[A-Za-z_][A-Za-z_0-9]{2,79}\\b',question)
+    strong=[token for token in identifiers
+            if '_' in token or
+            (any(c.islower() for c in token) and
+             sum(c.isupper() for c in token)>=2) or
+            (token[0].islower() and any(c.isupper() for c in token))]
+    return list(dict.fromkeys(quoted+called+strong))[:12]
+
+
+def symbol_candidates(repo, question, limit=30, *, confidence_gate=False):
     """Grounded, exact symbol-name discovery from the existing SQLite index.
 
     Navigation hints only, never source evidence. Query terms come from the
@@ -435,8 +452,11 @@ def symbol_candidates(repo, question, limit=30):
     stop={'the','and','from','where','what','when','which','why','how','does',
           'are','this','that','code','function','method','class','file','for',
           'with','inside','implementation','return','value','source'}
-    terms=list(dict.fromkeys(t for t in quoted+tokens
-                             if t.lower() not in stop))[:12]
+    if confidence_gate:
+        terms=_high_confidence_symbol_terms(question)
+    else:
+        terms=list(dict.fromkeys(t for t in quoted+tokens
+                                 if t.lower() not in stop))[:12]
     if not terms:
         return []
     try:
@@ -447,7 +467,10 @@ def symbol_candidates(repo, question, limit=30):
             for term in terms:
                 records.extend(conn.execute(
                     'SELECT path,line,end_line,name,kind FROM symbols '
-                    'WHERE name=? COLLATE NOCASE LIMIT ?', (term,20)).fetchall())
+                    'WHERE name=? COLLATE NOCASE '
+                    + ("AND lower(kind) NOT IN ('heading','section','title') "
+                       if confidence_gate else '')
+                    + 'LIMIT ?', (term,20)).fetchall())
     except sqlite3.Error:
         return []
     result=[]
@@ -474,7 +497,7 @@ def symbol_candidates(repo, question, limit=30):
 
 def hybrid_search(repo, question, db, embedder, *, limit=20,
                   lexical_search=None, source_search=None, include_symbols=False,
-                  symbol_search=None):
+                  symbol_search=None, symbol_confidence_gate=False):
     """Independent BM25-file + BM25-line + dense views. Gold-blind RRF."""
     if lexical_search is None:
         from code_intelligence import search_file_candidates
@@ -488,7 +511,11 @@ def hybrid_search(repo, question, db, embedder, *, limit=20,
     views=[('filename',1.0,lexical),('fts-line',1.1,line_hits),
            ('dense',1.4,dense)]
     if include_symbols:
-        symbols=(symbol_search or symbol_candidates)(repo,question,limit=30)
+        if symbol_search is None:
+            symbols=symbol_candidates(repo,question,limit=30,
+                                      confidence_gate=symbol_confidence_gate)
+        else:
+            symbols=symbol_search(repo,question,limit=30)
         views.append(('exact-symbol',1.3,symbols))
     return _rrf(views,limit=limit)
 
