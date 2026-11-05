@@ -425,8 +425,8 @@ def _high_confidence_symbol_terms(question):
     symbol intents without an explicit code delimiter / call syntax.
     """
     quoted=re.findall(r'[`]([A-Za-z_][A-Za-z_0-9]{2,79})[`]',question)
-    called=re.findall(r'(?<![A-Za-z_0-9])([A-Za-z_][A-Za-z_0-9]{2,79})\\s*\\(',question)
-    identifiers=re.findall(r'\\b[A-Za-z_][A-Za-z_0-9]{2,79}\\b',question)
+    called=re.findall(r'(?<![A-Za-z_0-9])([A-Za-z_][A-Za-z_0-9]{2,79})\s*\(',question)
+    identifiers=re.findall(r'\b[A-Za-z_][A-Za-z_0-9]{2,79}\b',question)
     strong=[token for token in identifiers
             if '_' in token or
             (any(c.islower() for c in token) and
