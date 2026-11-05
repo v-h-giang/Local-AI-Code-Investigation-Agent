@@ -70,6 +70,53 @@ class AgentImprovementTests(unittest.TestCase):
             self.assertFalse(result[0]['citation'])
             self.assertEqual(symbol_candidates(repo,'unknown_method'),[])
 
+    def test_gated_symbol_skips_common_words_and_doc_headings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/'code_intelligence.sqlite'
+            with closing(sqlite3.connect(db)) as conn:
+                with conn:
+                    conn.execute('CREATE TABLE symbols (path TEXT,line INTEGER,'
+                                 'end_line INTEGER,name TEXT,kind TEXT)')
+                    conn.executemany('INSERT INTO symbols VALUES (?,?,?,?,?)', [
+                        ('src/agent.py',4,15,'Agent','class'),
+                        ('README.md',8,8,'restore_state','heading'),
+                        ('src/state.f90',18,24,'restore_state','subroutine'),
+                        ('src/worker.py',27,31,'parseRequest','function'),
+                        ('src/net.py',10,18,'HTTPClient','class'),
+                    ])
+            repo=SimpleNamespace(intelligence_db=db)
+            self.assertEqual(symbol_candidates(
+                repo,'How can an Agent run this workflow?',confidence_gate=True),[])
+            direct=symbol_candidates(repo,
+                'Where does `restore_state` call parseRequest()?',
+                confidence_gate=True)
+            self.assertEqual({row['path'] for row in direct},
+                             {'src/state.f90','src/worker.py'})
+            self.assertTrue(all(row['citation'] is False for row in direct))
+            self.assertTrue(symbol_candidates(
+                repo,'Find HTTPClient',confidence_gate=True))
+            self.assertTrue(symbol_candidates(
+                repo,'Where does Agent run?',confidence_gate=False))
+
+    def test_gated_hybrid_is_identical_to_hybrid_without_strong_tokens(self):
+        repo=SimpleNamespace()
+        def lexical(*args,**kwargs):
+            return [{'path':'src/a.py','line_hint':2}]
+        def lines(*args,**kwargs):return []
+        def dense(*args,**kwargs):return [{'path':'src/b.py','line_hint':10}]
+        with patch('semantic_retrieval.dense_search',side_effect=dense):
+            with patch('semantic_retrieval.symbol_candidates',return_value=[]) as sym:
+                plain=hybrid_search(repo,'how does this work?','unused',None,
+                                    limit=8,lexical_search=lexical,
+                                    source_search=lines)
+                gated=hybrid_search(repo,'how does this work?','unused',None,
+                                    limit=8,lexical_search=lexical,
+                                    source_search=lines,include_symbols=True,
+                                    symbol_confidence_gate=True)
+                self.assertTrue(sym.called)
+                self.assertEqual(sym.call_args.kwargs['confidence_gate'],True)
+                self.assertEqual(plain,gated)
+
     def test_exact_symbol_hint_takes_priority_over_dense_same_file(self):
         from semantic_retrieval import _rrf
         rows=_rrf([
