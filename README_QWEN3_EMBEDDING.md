@@ -885,6 +885,36 @@ claim supported in a generated answer. Compare net gains, per-case losses,
 the number of emitted alternate windows and budget use before advancing
 to an opt-in agent-runtime A/B on independent cases.
 
+## P1.6 actual-source A/B result and case diagnostics
+
+The source-backed equal-3000-character prefetch comparison on 20 cases
+found 10/99 citable gold spans for EACH of baseline, +1 and +2 extra
+Dense windows. Cases with citable gold decreased from 9/20 to 8/20.
+At +1, 19 of 20 requested windows emitted and displayed source lines
+decreased from 189 to 170; at +2, 36 of 40 emitted and displayed
+source lines decreased to 158. Each new strategy gained at least one
+case but lost another. The identical aggregate gold-span total DOES
+NOT establish equivalent or improved evidence quality. Do not enable
+the alternate-window runtime prefetch based on these results.
+
+Investigate gains/losses on SAVED JSON before further expensive A/B runs:
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_evidence_window_case_diagnostics -v
+py -3 benchmark/evidence_window_case_diagnostics.py `
+  --evidence-report "benchmark/results/_diagnostics/evidence_window_ablation.json" `
+  --multiwindow-report "benchmark/results/_diagnostics/multiwindow_full_ablation_v2.json" `
+  --out "benchmark/results/_diagnostics/evidence_window_case_diagnostics.json"
+```
+
+The printed changed-case output provides gold-span IDs gained and lost,
+the opportunity IDs found in earlier Dense windows, and baseline versus
+experimental serialized budget use. This is a retrospective audit, not a
+gold-guided retrieval strategy. It does not read source, run Ollama or
+modify the agent. Interpret it before proposing budget allocation changes.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
