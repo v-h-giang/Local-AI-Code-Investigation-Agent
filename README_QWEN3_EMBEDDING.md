@@ -756,6 +756,40 @@ Decision: if meaningful additional gold span coverage appears at modest
 source-line cost, test an opt-in additive reader separately. Otherwise
 prioritize evidence acquisition/LLM tool-step decisions and query retrieval.
 
+## P1.5 follow-up: true multi-chunk same-query ablation
+
+The first saved-report top-8 multiwindow diagnostic returned zero alternate
+windows and zero new spans. This is an instrumentation limitation, not a
+valid negative test of the multiwindow hypothesis: original
+dense_search(..., per_file=1) stores one chunk per file, and Hybrid's
+RRF already adopts that same Dense chunk window for matching files.
+The saved report also exposes only the first eight Dense files.
+
+An opt-in benchmark flag now collects up to 3 ranked Dense chunks per file
+during the SAME cosine-similarity scan and embedding request. The default
+dense_search return type, legacy ranking and all pre-existing A/B modes
+are unchanged. For Hybrid top-eight files only, we choose up to 4 extra
+distinct Dense windows with at least eight previously unread lines,
+before reading gold spans. This is a hypothetical navigation audit only.
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_top8_multiwindow_diagnostics `
+  benchmark.tests.test_embedding_compare -v
+py -3 benchmark/embedding_compare.py `
+  --from-run hybrid_symbol_4step_01 `
+  --embed-db "benchmark/results/agent-framework.sqlite" `
+  --out "benchmark/results/_diagnostics/multiwindow_full_ablation.json" `
+  --collect-multiwindow --summary-only
+```
+
+Send only the printed `summary.multiwindow_diagnostics` (or the whole
+brief summary). Compare `new_gold_span_window_hits` against
+`additional_source_lines`. No source is read or cited by this diagnostic;
+it is not an agent-run result. Additional per-file chunk collection may
+increase peak RAM but performs no extra Ollama query.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
