@@ -77,6 +77,29 @@ def select_alternates(hybrid_top8, dense_top8, *, max_extra=4,
     return alternates
 
 
+
+def select_from_dense_windows(hybrid_top8, windows_by_path, *,
+                              max_extra=4, min_new_lines=8):
+    """Select alternate chunks from the same dense search's scored inventory.
+
+    Existing Hybrid top8 windows are immutable. Rank candidates by original
+    cosine similarity (not gold labels); never consider out-of-scope files.
+    """
+    allowed={r.get('path') for r in hybrid_top8}
+    candidates=[]
+    for path, windows in windows_by_path.items():
+        if path not in allowed:
+            continue
+        for item in windows:
+            if item.get('path') == path and window(item):
+                candidates.append(item)
+    candidates.sort(key=lambda row: (
+        -float(row.get('similarity',0.0)), row['path'],
+        row['start_line']))
+    return select_alternates(
+        hybrid_top8,candidates,max_extra=max_extra,
+        min_new_lines=min_new_lines)
+
 def overlapping_gold_ids(spans, windows):
     """Score windows after all navigation choices are frozen."""
     return {
