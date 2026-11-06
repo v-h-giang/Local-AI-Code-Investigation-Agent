@@ -19,6 +19,8 @@ from semantic_retrieval import OllamaEmbedder,dense_search,symbol_candidates,_rr
 from scoped_symbol_resolution import scoped_symbol_resolve
 from dense_preserving_fusion import (hybrid_head_dense_tail,
     hybrid_head_interleaved_tail, hybrid_head_rrf_tail)
+from benchmark.top8_multiwindow_diagnostics import (
+    window, overlapping_gold_ids, select_from_dense_windows)
 from code_intelligence import search_relevant_sources
 from contextlib import closing
 import sqlite3
@@ -86,7 +88,8 @@ def _evaluate(rows,gold):
     }
 
 
-def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
+def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None,
+            collect_multiwindow=False):
     """Evaluate identical cached retrieval views; no generative LLM calls.
 
     Gold labels are first read after ALL mode rankings have been created.
@@ -116,7 +119,13 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
         started=time.perf_counter()
         lexical=search_file_candidates(repo,query,limit=40,strategy='v59')
         line_hits=search_relevant_sources(repo,query,limit=30)
-        dense=dense_search(repo,query,db,embedder,limit=60,per_file=1)
+        if collect_multiwindow:
+            dense,all_dense_windows=dense_search(
+                repo,query,db,embedder,limit=60,per_file=1,
+                collect_windows_per_file=3)
+        else:
+            dense=dense_search(repo,query,db,embedder,limit=60,per_file=1)
+            all_dense_windows={}
         symbols=symbol_candidates(repo,query,limit=30)
         gated_symbols=symbol_candidates(repo,query,limit=30,confidence_gate=True)
         views=[('filename',1.0,lexical),('fts-line',1.1,line_hits),
@@ -136,6 +145,14 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
             ranked['hybrid'],dense,limit=30,head=8)
         ranked['hybrid_rrf_tail']=hybrid_head_rrf_tail(
             ranked['hybrid'],dense,limit=30,head=8)
+        # All candidate window selection is completed BEFORE reading gold.
+        original_windows=[w for row in ranked['hybrid'][:8]
+                          if (w:=window(row)) is not None]
+        alternates=(select_from_dense_windows(
+            ranked['hybrid'][:8],all_dense_windows,max_extra=4)
+            if collect_multiwindow else [])
+        additional_windows=[(row['path'],row['start_line'],row['end_line'])
+                            for row in alternates]
         elapsed=time.perf_counter()-started
         # Gold is read only now, after all retrieval decisions.
         gold=case.get('gold_spans') or []
@@ -150,8 +167,20 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
         interleaved=variants['hybrid_interleaved_tail']
         rrf_tail=variants['hybrid_rrf_tail']
         dense_eval=variants['dense']
+        baseline_span_ids=overlapping_gold_ids(gold,original_windows)
+        augmented_span_ids=overlapping_gold_ids(
+            gold,original_windows+additional_windows)
         result.append({
             'id':case['id'],'question':query,
+            'multiwindow_diagnostics':{
+                'alternates':alternates,
+                'extra_window_count':len(alternates),
+                'additional_source_lines':sum(row['new_lines'] for row in alternates),
+                'hybrid_top8_window_span_ids':sorted(baseline_span_ids),
+                'augmented_top8_window_span_ids':sorted(augmented_span_ids),
+                'new_gold_span_ids':sorted(augmented_span_ids-baseline_span_ids),
+                'lost_gold_span_ids':sorted(baseline_span_ids-augmented_span_ids),
+            },
             'gold_files':len(relevant),'gold_spans':len(gold),
             'seconds':round(elapsed,3),
             'variants':variants,
@@ -299,6 +328,27 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
         'gated_symbol_match_cases':sum(bool(x['symbol_diagnostics']['gated_match_count'])
                                         for x in result),
     }
+    if collect_multiwindow:
+        summary['multiwindow_diagnostics']={
+            'cases_with_alternates':sum(bool(x['multiwindow_diagnostics']['extra_window_count'])
+                                        for x in result),
+            'extra_window_count':sum(x['multiwindow_diagnostics']['extra_window_count']
+                                     for x in result),
+            'additional_source_lines':sum(x['multiwindow_diagnostics']['additional_source_lines']
+                                           for x in result),
+            'hybrid_top8_window_gold_spans':sum(
+                len(x['multiwindow_diagnostics']['hybrid_top8_window_span_ids'])
+                for x in result),
+            'augmented_top8_window_gold_spans':sum(
+                len(x['multiwindow_diagnostics']['augmented_top8_window_span_ids'])
+                for x in result),
+            'new_gold_span_window_hits':sum(
+                len(x['multiwindow_diagnostics']['new_gold_span_ids'])
+                for x in result),
+            'cases_with_new_gold_span_windows':sum(
+                bool(x['multiwindow_diagnostics']['new_gold_span_ids'])
+                for x in result),
+        }
     return {'suite':suite,'run_id':run_id,'case_count':len(result),
             'gold_files':total_files,'gold_spans':total_spans,
             'summary':summary,'cases':result,
@@ -325,12 +375,15 @@ def main(argv=None):
     p.add_argument('--case-id',action='append',default=[])
     p.add_argument('--intelligence-index',type=Path)
     p.add_argument('--out',type=Path)
+    p.add_argument('--collect-multiwindow',action='store_true',
+                   help='Collect 3 Dense windows per file in the same query pass')
     p.add_argument('--summary-only',action='store_true',
                    help='Print only summary and report path; save full JSON with --out')
     args=p.parse_args(argv)
     report=compare(args.from_run,args.suite,args.embed_db,
                    OllamaEmbedder(args.model,args.host,args.dimensions),args.case_id,
-                   intelligence_index=args.intelligence_index)
+                   intelligence_index=args.intelligence_index,
+                   collect_multiwindow=args.collect_multiwindow)
     text=json.dumps(report,ensure_ascii=False,indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True,exist_ok=True)
