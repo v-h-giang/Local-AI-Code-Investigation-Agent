@@ -2,7 +2,7 @@
 import unittest
 from benchmark.top8_multiwindow_diagnostics import (
     window, extra_lines, select_alternates, inspect_case,
-    select_from_dense_windows,
+    select_from_dense_windows, diagnose_scored_inventory,
 )
 
 
@@ -56,6 +56,22 @@ class Top8MultiWindowTests(unittest.TestCase):
                          ('src/a.f90',100,147))
         self.assertIsNone(window({'path':'src/a.f90',
                                   'start_line':None,'end_line':200}))
+
+    def test_scored_inventory_gate_counts_and_selection_agree(self):
+        head=[{'path':'src/long.py','line_start':1,'line_end':48}]
+        scored={'src/long.py':[
+            {'path':'src/long.py','start_line':1,'end_line':48,
+             'similarity':0.90},
+            {'path':'src/long.py','start_line':37,'end_line':84,
+             'similarity':0.80},
+            {'path':'src/long.py','start_line':145,'end_line':192,
+             'similarity':0.70}]}
+        report=diagnose_scored_inventory(head,scored)
+        chosen=select_from_dense_windows(head,scored,max_extra=4)
+        self.assertEqual(report['top8_paths_in_scored_dense'],1)
+        self.assertEqual(report['scored_chunk_rows_in_top8'],3)
+        self.assertEqual(report['qualifying_chunk_rows_before_limit'],2)
+        self.assertEqual(len(chosen),2)
 
     def test_full_dense_inventory_can_supply_second_chunk(self):
         hybrid=[{'path':'src/a.f90','line_start':1,'line_end':48},
