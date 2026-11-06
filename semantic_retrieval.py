@@ -347,8 +347,14 @@ def _query_vector(conn, embedder, query):
     return vector
 
 
-def dense_search(repo, query, db, embedder, limit=40, *, per_file=2):
-    """Find code passages with path and actual line spans; no verified citation."""
+def dense_search(repo, query, db, embedder, limit=40, *, per_file=2,
+                 collect_windows_per_file=0):
+    """Find code passages with path and actual line spans; no verified citation.
+
+    Optional offline-only collect_windows_per_file returns (rows, all_windows)
+    using the SAME query embedding and scored chunks. The original return
+    value and ranking are unchanged when the option is zero.
+    """
     if not query.strip():
         return []
     if not Path(db).is_file():
@@ -381,6 +387,16 @@ def dense_search(repo, query, db, embedder, limit=40, *, per_file=2):
             seen[path]=seen.get(path,0)+1
             if len(output)>=max(1,min(100,int(limit))):
                 break
+        if collect_windows_per_file:
+            count=max(1,min(5,int(collect_windows_per_file)))
+            all_windows={}
+            for score,path,start,end,_preview in scored:
+                matches=all_windows.setdefault(path,[])
+                if len(matches)<count:
+                    matches.append({'path':path,'start_line':start,'end_line':end,
+                                    'similarity':round(score,6),
+                                    'citation':False})
+            return output,all_windows
         return output
 
 
