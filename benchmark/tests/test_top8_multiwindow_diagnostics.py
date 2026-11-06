@@ -46,6 +46,17 @@ class Top8MultiWindowTests(unittest.TestCase):
         self.assertEqual(extra_lines(('a',30,34),[('b',30,34)]),5)
 
 
+    def test_window_supports_both_hybrid_and_raw_dense_field_names(self):
+        hybrid={'path':'src/a.f90','line_start':15,'line_end':31}
+        raw_dense={'path':'src/a.f90','start_line':15,'end_line':31}
+        self.assertEqual(window(hybrid),('src/a.f90',15,31))
+        self.assertEqual(window(raw_dense),('src/a.f90',15,31))
+        self.assertEqual(window({'path':'src/a.f90',
+                                 'start_line':100,'end_line':200}),
+                         ('src/a.f90',100,147))
+        self.assertIsNone(window({'path':'src/a.f90',
+                                  'start_line':None,'end_line':200}))
+
     def test_full_dense_inventory_can_supply_second_chunk(self):
         hybrid=[{'path':'src/a.f90','line_start':1,'line_end':48},
                 {'path':'src/b.f90','line_start':10,'line_end':20}]
