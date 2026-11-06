@@ -642,6 +642,43 @@ do NOT wire hints into evidence acquisition yet. If multiple cases show
 new matches, implement a separate opt-in *additive* multihint reader,
 preserving original Dense windows and provenance, then A/B it.
 
+## P1.4 Dense-preserving Hybrid fusion (offline-only)
+
+The saved 20-case analysis found Hybrid recall@8=21/59 (35.59%),
+Dense recall@20=37/59 (62.71%), and Hybrid recall@20=34/59
+(57.63%). Scoped hints supplied one hypothetical extra gold-span window
+in case 0009 (auto_retry.py). Do not feed symbol hints into the evidence
+reader until there is stronger evidence of value.
+
+An isolated offline candidate fusion `hybrid_dense_tail` now:
+- Keeps the first 8 Hybrid candidates and their line windows unchanged.
+- Appends distinct Dense candidates to positions 9+ with original Dense windows.
+- Uses remaining Hybrid-tail candidates only if space remains.
+- Makes no model call other than the original shared Qwen3 query, and
+  never reads gold labels for ranking.
+
+This intentionally tests capacity allocation in top20; it does not imply
+improved final-answer correctness. The agent's normal discover_files call
+typically requests only eight candidates, so the Dense tail is NOT enabled
+as a new runtime agent mode pending offline evidence and agent-budget review.
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_dense_preserving_fusion `
+  benchmark.tests.test_embedding_compare -v
+py -3 benchmark/embedding_compare.py `
+  --from-run hybrid_symbol_4step_01 `
+  --embed-db "benchmark/results/agent-framework.sqlite" `
+  --out "benchmark/results/_diagnostics/dense_tail_ablation.json" `
+  --summary-only
+```
+
+Only the compact summary is printed; the full case-level JSON is still
+saved. Compare `hybrid_dense_tail` against Hybrid at top8/top20 and Dense
+at top20, including chunk-window overlap. A fusion that sacrifices
+many top20 files or window hits should not proceed to agent integration.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
