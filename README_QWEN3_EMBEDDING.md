@@ -790,6 +790,33 @@ brief summary). Compare `new_gold_span_window_hits` against
 it is not an agent-run result. Additional per-file chunk collection may
 increase peak RAM but performs no extra Ollama query.
 
+## P1.5 zero-result index audit (no Ollama)
+
+The second full-score multiwindow ablation again showed 0 alternates across
+20 cases, even with collect_windows_per_file=3. This is not sufficient
+to prove that indexed files contain no alternate source chunks. The
+zero may come from indexing coverage, similarity order or selection.
+
+Run the following read-only structural test BEFORE another embedding run:
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_multiwindow_index_audit `
+  benchmark.tests.test_top8_multiwindow_diagnostics -v
+py -3 benchmark/multiwindow_index_audit.py `
+  --from-report "benchmark/results/_diagnostics/multiwindow_full_ablation.json" `
+  --embed-db "benchmark/results/agent-framework.sqlite" `
+  --out "benchmark/results/_diagnostics/multiwindow_index_audit.json"
+```
+
+The command prints a short summary plus three examples. It checks the
+selector with raw Dense chunk field names before reading a pinned SQLite
+index in read-only mode. Structural availability differs from similarity
+rank: it cannot prove that the top 3 Dense chunks were distinct enough.
+If structurally viable files exist but selected alternates remain zero,
+inspect top-3 similarity windows in the saved run before changing reader.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
