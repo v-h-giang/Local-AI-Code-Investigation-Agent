@@ -2,6 +2,7 @@
 import unittest
 from benchmark.top8_multiwindow_diagnostics import (
     window, extra_lines, select_alternates, inspect_case,
+    select_from_dense_windows,
 )
 
 
@@ -43,6 +44,28 @@ class Top8MultiWindowTests(unittest.TestCase):
         self.assertIsNone(window({'path':'src/a.f90','line_start':0,'line_end':3}))
         self.assertEqual(extra_lines(('a',15,25),[('a',10,20)]),5)
         self.assertEqual(extra_lines(('a',30,34),[('b',30,34)]),5)
+
+
+    def test_full_dense_inventory_can_supply_second_chunk(self):
+        hybrid=[{'path':'src/a.f90','line_start':1,'line_end':48},
+                {'path':'src/b.f90','line_start':10,'line_end':20}]
+        inventory={
+            'src/a.f90':[
+                {'path':'src/a.f90','start_line':1,'end_line':48,
+                 'similarity':0.99},
+                {'path':'src/a.f90','start_line':37,'end_line':84,
+                 'similarity':0.80},
+                {'path':'src/a.f90','start_line':145,'end_line':192,
+                 'similarity':0.70}],
+            'src/unrelated.f90':[
+                {'path':'src/unrelated.f90','start_line':1,'end_line':48,
+                 'similarity':1.0}],
+        }
+        alternatives=select_from_dense_windows(hybrid,inventory,max_extra=2)
+        self.assertEqual([r['start_line'] for r in alternatives],[37,145])
+        self.assertEqual(alternatives[0]['new_lines'],36)
+        self.assertEqual(alternatives[1]['new_lines'],48)
+        self.assertTrue(all(not r['citation'] for r in alternatives))
 
 
 if __name__=='__main__':
