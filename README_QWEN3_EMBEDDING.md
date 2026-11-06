@@ -679,6 +679,46 @@ saved. Compare `hybrid_dense_tail` against Hybrid at top8/top20 and Dense
 at top20, including chunk-window overlap. A fusion that sacrifices
 many top20 files or window hits should not proceed to agent integration.
 
+## P1.4 follow-up: fixed-allocation tail fusion alternatives
+
+Measured results of the previous 20-case experiment: Hybrid 21/59 gold
+files at top 8, 34/59 at top 20 and 26/99 chunk overlaps; Hybrid
+plus Dense-first tail 21/59 at top 8, 35/59 at top 20 and 29/99
+chunk overlaps. Dense alone: 37/59 at top 20 and 30/99 overlaps.
+Three cases gained and three lost at least one gold file at top 20
+with Dense-first allocation; investigate per-case losses before promotion.
+
+New offline-only, fixed (not gold-tuned) alternatives:
+- hybrid_interleaved_tail: preserve Hybrid top 8; interleave one
+  unique Dense candidate and one Hybrid-tail candidate thereafter.
+- hybrid_rrf_tail: preserve Hybrid top 8; use equal-weight RRF(k=40)
+  for the remaining Hybrid and Dense candidates; preserve Dense source
+  windows for tail files found by Dense.
+
+Neither alters the runtime agent, nor calls Nemotron. All modes share
+one Qwen3 embedding query per case. Source labels are used only after
+retrieval. Do not select weights or final architecture based solely
+on these 20 diagnostic cases; require independent validation.
+
+Run on Windows PowerShell:
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_dense_preserving_fusion `
+  benchmark.tests.test_embedding_compare -v
+py -3 benchmark/embedding_compare.py `
+  --from-run hybrid_symbol_4step_01 `
+  --embed-db "benchmark/results/agent-framework.sqlite" `
+  --out "benchmark/results/_diagnostics/tail_strategy_ablation.json" `
+  --summary-only
+```
+
+Expect nine comparative modes including hybrid_interleaved_tail and
+hybrid_rrf_tail. A candidate file hit or chunk window overlap is NOT
+an observed/cited gold evidence span. The 8-file agent runtime discovery
+limit remains an outstanding integration constraint.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
