@@ -719,6 +719,43 @@ hybrid_rrf_tail. A candidate file hit or chunk window overlap is NOT
 an observed/cited gold evidence span. The 8-file agent runtime discovery
 limit remains an outstanding integration constraint.
 
+## P1.5: Additive top-eight multi-window opportunity audit
+
+The P1.4 comparison over 20 cases found Hybrid+Dense-first tail yields
+21/59 Recall@8, 35/59 Recall@20, and 29/99 chunk-overlap hits.
+Interleaved and RRF tails also yield 35/59 Recall@20 but only 27/99
+chunk-overlap hits. Dense alone yields 37/59 Recall@20, 30/99 spans.
+Tail-only improvements do NOT reach the agent when its file discovery
+is limited to 8 candidates.
+
+P1.5 therefore tests a different, strictly offline hypothesis: if a file
+is already in Hybrid top8, can an additional distinct Dense window for
+that SAME file expose a gold span missed by the saved Hybrid window?
+The experiment uses the saved top8 diagnostics only, keeps the original
+Hybrid file ranks/windows, and adds at most 4 non-overlapping-ish
+candidate Dense windows (at least 8 newly exposed lines each).
+The test uses no Ollama and does not read or change repository source.
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_top8_multiwindow_diagnostics `
+  benchmark.tests.test_dense_preserving_fusion -v
+py -3 benchmark/top8_multiwindow_diagnostics.py `
+  --from-report "benchmark/results/_diagnostics/tail_strategy_ablation.json" `
+  --out "benchmark/results/_diagnostics/top8_multiwindow_opportunity.json"
+```
+
+Only a compact summary is printed, with new hypothetical gold span window
+hits and additional source lines. IMPORTANT: saved `top8_diagnostics` only
+contains Dense's first eight candidates. This bounds available alternate
+windows; it cannot detect a Dense window for a Hybrid top8 file ranked
+9-60 by Dense. A window overlap is not read-source evidence or a citation.
+
+Decision: if meaningful additional gold span coverage appears at modest
+source-line cost, test an opt-in additive reader separately. Otherwise
+prioritize evidence acquisition/LLM tool-step decisions and query retrieval.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
