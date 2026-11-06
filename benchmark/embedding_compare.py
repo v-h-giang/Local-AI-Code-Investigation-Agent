@@ -20,7 +20,8 @@ from scoped_symbol_resolution import scoped_symbol_resolve
 from dense_preserving_fusion import (hybrid_head_dense_tail,
     hybrid_head_interleaved_tail, hybrid_head_rrf_tail)
 from benchmark.top8_multiwindow_diagnostics import (
-    window, overlapping_gold_ids, select_from_dense_windows)
+    window, overlapping_gold_ids, select_from_dense_windows,
+    diagnose_scored_inventory)
 from code_intelligence import search_relevant_sources
 from contextlib import closing
 import sqlite3
@@ -151,6 +152,15 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None,
         alternates=(select_from_dense_windows(
             ranked['hybrid'][:8],all_dense_windows,max_extra=4)
             if collect_multiwindow else [])
+        inventory_diagnostics=(diagnose_scored_inventory(
+            ranked['hybrid'][:8],all_dense_windows)
+            if collect_multiwindow else None)
+        if (collect_multiwindow and
+                inventory_diagnostics['qualifying_chunk_rows_before_limit']>0
+                and not alternates):
+            raise RuntimeError(
+                'Multi-window selector returned zero despite qualifying Dense '
+                'chunks; inspect benchmark/top8_multiwindow_diagnostics.py')
         additional_windows=[(row['path'],row['start_line'],row['end_line'])
                             for row in alternates]
         elapsed=time.perf_counter()-started
@@ -173,6 +183,7 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None,
         result.append({
             'id':case['id'],'question':query,
             'multiwindow_diagnostics':{
+                'inventory_diagnostics':inventory_diagnostics,
                 'alternates':alternates,
                 'extra_window_count':len(alternates),
                 'additional_source_lines':sum(row['new_lines'] for row in alternates),
@@ -330,6 +341,18 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None,
     }
     if collect_multiwindow:
         summary['multiwindow_diagnostics']={
+            'cases_with_qualifying_dense_chunks':sum(
+                bool(x['multiwindow_diagnostics']['inventory_diagnostics']
+                     ['qualifying_chunk_rows_before_limit']) for x in result),
+            'total_qualifying_dense_chunks_before_limit':sum(
+                x['multiwindow_diagnostics']['inventory_diagnostics']
+                 ['qualifying_chunk_rows_before_limit'] for x in result),
+            'cases_with_top8_scored_dense_paths':sum(
+                bool(x['multiwindow_diagnostics']['inventory_diagnostics']
+                     ['top8_paths_in_scored_dense']) for x in result),
+            'total_top8_scored_chunk_rows':sum(
+                x['multiwindow_diagnostics']['inventory_diagnostics']
+                 ['scored_chunk_rows_in_top8'] for x in result),
             'cases_with_alternates':sum(bool(x['multiwindow_diagnostics']['extra_window_count'])
                                         for x in result),
             'extra_window_count':sum(x['multiwindow_diagnostics']['extra_window_count']
