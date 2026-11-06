@@ -1,5 +1,6 @@
 """Unit tests for saved-hybrid scoped symbol hint diagnosis (no Ollama)."""
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,11 +20,16 @@ class ScopedHintDiagnosticsTests(unittest.TestCase):
     def test_scoped_hint_is_navigation_not_citation(self):
         with tempfile.TemporaryDirectory() as tmp:
             db=Path(tmp)/'intelligence.sqlite'
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
                 conn.execute('CREATE TABLE symbols (path TEXT,line INTEGER,'
                              'end_line INTEGER,name TEXT,kind TEXT)')
                 conn.execute('INSERT INTO symbols VALUES (?,?,?,?,?)',
                              ('src/a.f90',21,24,'restore_persistent_state','subroutine'))
+                conn.commit()
+            # sqlite3.Connection's context manager commits but does not close.
+            # Ensure the handle is released before TemporaryDirectory cleanup.
+            with self.assertRaises(sqlite3.ProgrammingError):
+                conn.execute('SELECT 1')
             case={'id':'test-case','suite':'repocontextbench',
                   'question':'How do we restore persistent state?',
                   'gold_spans':[{'id':'E1','path':'src/a.f90',
