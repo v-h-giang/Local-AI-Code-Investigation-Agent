@@ -608,6 +608,40 @@ The report contains a sixth arm: `hybrid_symbol_scoped`, with additional
 file recall@8=21/59 (35.59%); Dense retains stronger top-20 coverage.
 Do not interpret candidate overlap as observed/cited gold evidence.
 
+## P1.3 Symbol hint opportunity audit (no-model, read-only)
+
+After scoped symbol mode showed the same 21/59 top-8 gold files and
+26/99 chunk overlaps as Hybrid, with hints in 9/20 cases, first test
+whether those hints actually overlap gold source spans. Do not let them
+replace Dense source windows before measuring their usefulness.
+
+The following command replays saved Hybrid top-8 candidate paths using
+the pinned existing intelligence SQLite (no Ollama, no embedding query,
+no Nemotron, no source modification) and compares existing source windows
+with hypothetical +/-8-line windows around local scoped symbols:
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_scoped_hint_diagnostics `
+  benchmark.tests.test_scoped_symbol_resolution -v
+py -3 benchmark/scoped_hint_diagnostics.py `
+  --from-report "benchmark/results/_diagnostics/scoped_symbol_ablation.json" `
+  --out "benchmark/results/_diagnostics/scoped_hint_opportunity.json"
+```
+
+The console prints only summary, including symbol-hint count, number of
+hints on gold files, exact-line gold overlap, +/-8 window overlap, and
+**new gold spans found by union of saved Hybrid top-8 source windows
+with hypothetical symbol windows**. Note that this last metric is top-8
+window opportunity, not the previous top-20 retrieval chunk overlap,
+and neither is proof of actual evidence observation/citation.
+
+Decision gate: if no new gold spans overlap with source symbol windows,
+do NOT wire hints into evidence acquisition yet. If multiple cases show
+new matches, implement a separate opt-in *additive* multihint reader,
+preserving original Dense windows and provenance, then A/B it.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
