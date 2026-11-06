@@ -106,6 +106,60 @@ def select_from_dense_windows(hybrid_top8, windows_by_path, *,
         hybrid_top8,candidates,max_extra=max_extra,
         min_new_lines=min_new_lines)
 
+def diagnose_scored_inventory(hybrid_top8, windows_by_path, *,
+                              min_new_lines=8):
+    """Explain which same-query Dense chunks survive each selection gate.
+
+    Does not select using gold labels and does not change retrieval. Limited
+    examples permit a one-case debug run rather than another 20-case pass.
+    """
+    scope={r.get('path') for r in hybrid_top8}
+    baseline=[w for r in hybrid_top8 if (w:=window(r)) is not None]
+    eligible=[]
+    valid=0
+    candidates=0
+    matched_paths=0
+    multi_paths=0
+    qualifying_paths=set()
+    samples=[]
+    for path in sorted(scope):
+        if not isinstance(path,str):
+            continue
+        chunks=windows_by_path.get(path) or []
+        if chunks:
+            matched_paths+=1
+        if len(chunks)>1:
+            multi_paths+=1
+        for chunk in chunks:
+            candidates+=1
+            candidate=window(chunk)
+            if candidate is None or candidate[0]!=path:
+                continue
+            valid+=1
+            new_lines=extra_lines(candidate,baseline)
+            if new_lines>=min_new_lines:
+                qualifying_paths.add(path)
+                eligible.append((path,candidate[1],candidate[2],new_lines))
+                if len(samples)<8:
+                    samples.append({
+                        'path':path,'start_line':candidate[1],
+                        'end_line':candidate[2],
+                        'new_lines':new_lines,
+                        'similarity':chunk.get('similarity')
+                    })
+    return {
+        'hybrid_top8_count':len(hybrid_top8),
+        'dense_scored_paths_total':len(windows_by_path),
+        'top8_paths_in_scored_dense':matched_paths,
+        'top8_paths_with_multiple_scored_chunks':multi_paths,
+        'scored_chunk_rows_in_top8':candidates,
+        'valid_window_rows_in_top8':valid,
+        'qualifying_chunk_rows_before_limit':len(eligible),
+        'paths_with_qualifying_chunk':len(qualifying_paths),
+        'qualifying_examples':samples,
+    }
+
+
 def overlapping_gold_ids(spans, windows):
     """Score windows after all navigation choices are frozen."""
     return {
