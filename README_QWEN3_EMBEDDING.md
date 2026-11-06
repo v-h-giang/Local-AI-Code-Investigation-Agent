@@ -817,6 +817,35 @@ rank: it cannot prove that the top 3 Dense chunks were distinct enough.
 If structurally viable files exist but selected alternates remain zero,
 inspect top-3 similarity windows in the saved run before changing reader.
 
+## P1.5 full 20-case window-budget replay
+
+The corrected 20-case --collect-multiwindow experiment produced
+17/99 gold-span overlaps in Hybrid top-8 source windows and 23/99
+after selecting 80 additional Dense windows in total. Six extra gold
+spans in four cases cost 3201 newly exposed source lines (hypothetical
+reading, not actual token budget or evidence). All twenty cases had
+eligible alternate Dense windows. Ranking metrics remain unchanged.
+
+To avoid another embedding run, evaluate the exact saved window ordering
+at budgets 0, 1, 2, 3 and 4 per case. No re-ranking, source reads or
+Ollama calls occur. Marginal gold-span yield and newly exposed source
+lines are reported for each added window.
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_multiwindow_budget_ablation -v
+py -3 benchmark/multiwindow_budget_ablation.py `
+  --from-report "benchmark/results/_diagnostics/multiwindow_full_ablation_v2.json" `
+  --out "benchmark/results/_diagnostics/multiwindow_budget_ablation.json"
+```
+
+Use the marginal table to choose whether a budget of one or two windows
+is worth a future separate evidence-reader experiment. Avoid choosing
+a general default solely from these 20 already-inspected diagnostic cases.
+Neither source-window overlap nor additional-source-line cost asserts that
+an agent actually read, cited or used the associated source evidence.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
