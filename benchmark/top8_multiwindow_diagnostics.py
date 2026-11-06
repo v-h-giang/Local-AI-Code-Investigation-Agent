@@ -28,8 +28,14 @@ from benchmark import run
 def window(row, *, max_lines=48):
     """A bounded source window from existing candidate navigation metadata."""
     path = row.get("path")
+    # Hybrid metadata uses line_start/line_end; raw dense_search chunks use
+    # start_line/end_line. Accept either without changing source coordinates.
     start = row.get("line_start")
     end = row.get("line_end")
+    if start is None:
+        start = row.get("start_line")
+    if end is None:
+        end = row.get("end_line")
     if (not isinstance(path, str) or not path
             or type(start) is not int or type(end) is not int
             or start < 1 or end < start):
