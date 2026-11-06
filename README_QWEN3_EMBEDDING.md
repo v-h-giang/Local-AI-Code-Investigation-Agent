@@ -846,6 +846,45 @@ a general default solely from these 20 already-inspected diagnostic cases.
 Neither source-window overlap nor additional-source-line cost asserts that
 an agent actually read, cited or used the associated source evidence.
 
+## P1.6 Fixed-budget, source-backed Evidence Acquisition A/B (offline)
+
+P1.5 evaluated 20 already-inspected cases with Hybrid top-8 candidate
+windows and additional Dense windows selected without gold information.
+At budgets 0/1/2/3/4, hypothetical gold-span coverage was
+17/21/23/23/23 out of 99, with 0/804/1575/2415/3201 additional
+source lines. The third and fourth windows had zero marginal overlap gain.
+These are window-overlap opportunities, NOT observed or cited source.
+
+P1.6 is an independent, read-only, source-backed prefetch experiment:
+- Uses the original `acquire_evidence()` for baseline 0.
+- Tests 1 or 2 fixed-order alternate Dense windows from the SAVED report.
+- Allocates an equal 3000-character total JSON budget for each setting;
+  each alternate reserves 500 characters from the baseline budget.
+- Reads the frozen source through Repo.read_file and compresses with the
+  existing `structure_mmr`, retaining exact line-numbered source text.
+- Counts separately visible gold-span lines and citable source_refs
+  that actually appear in the returned excerpts; it also reports losses
+  caused by reserving context for alternatives.
+- Reads gold spans only AFTER all excerpts have been formed.
+- Does not call Ollama, patch agent runtime, or claim answer correctness.
+
+```powershell
+git switch feature/qwen3-embedding-retrieval
+git pull origin feature/qwen3-embedding-retrieval
+py -3 -m unittest benchmark.tests.test_evidence_window_ablation `
+  benchmark.tests.test_multiwindow_budget_ablation -v
+py -3 benchmark/evidence_window_ablation.py `
+  --from-report "benchmark/results/_diagnostics/multiwindow_full_ablation_v2.json" `
+  --max-chars 3000 --per-window-chars 500 --limit 6 `
+  --out "benchmark/results/_diagnostics/evidence_window_ablation.json"
+```
+
+Only source lines actually returned by the prefetch extracts count here.
+Even `source_refs` denotes a line in a prefetch excerpt, not necessarily a
+claim supported in a generated answer. Compare net gains, per-case losses,
+the number of emitted alternate windows and budget use before advancing
+to an opt-in agent-runtime A/B on independent cases.
+
 ## Limitations
 
 - No evidence of improved Recall@K exists until the local Ollama model and pinned benchmark have been run. The repository tests use fake embeddings only.
