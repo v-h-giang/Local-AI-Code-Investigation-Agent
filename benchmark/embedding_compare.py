@@ -17,7 +17,8 @@ from codebase import Repo
 from code_intelligence import search_file_candidates
 from semantic_retrieval import OllamaEmbedder,dense_search,symbol_candidates,_rrf
 from scoped_symbol_resolution import scoped_symbol_resolve
-from dense_preserving_fusion import hybrid_head_dense_tail
+from dense_preserving_fusion import (hybrid_head_dense_tail,
+    hybrid_head_interleaved_tail, hybrid_head_rrf_tail)
 from code_intelligence import search_relevant_sources
 from contextlib import closing
 import sqlite3
@@ -108,7 +109,8 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
            and (not case_ids or c['id'] in case_ids)]
     result=[]
     modes=('baseline','dense','hybrid','hybrid_symbol','hybrid_symbol_gated',
-           'hybrid_symbol_scoped','hybrid_dense_tail')
+           'hybrid_symbol_scoped','hybrid_dense_tail',
+           'hybrid_interleaved_tail','hybrid_rrf_tail')
     for case in cases:
         query=case['question']
         started=time.perf_counter()
@@ -130,6 +132,10 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
             repo,query,ranked['hybrid'],limit=30)
         ranked['hybrid_dense_tail']=hybrid_head_dense_tail(
             ranked['hybrid'],dense,limit=30,head=8)
+        ranked['hybrid_interleaved_tail']=hybrid_head_interleaved_tail(
+            ranked['hybrid'],dense,limit=30,head=8)
+        ranked['hybrid_rrf_tail']=hybrid_head_rrf_tail(
+            ranked['hybrid'],dense,limit=30,head=8)
         elapsed=time.perf_counter()-started
         # Gold is read only now, after all retrieval decisions.
         gold=case.get('gold_spans') or []
@@ -141,6 +147,8 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
         gated=variants['hybrid_symbol_gated']
         scoped=variants['hybrid_symbol_scoped']
         dense_tail=variants['hybrid_dense_tail']
+        interleaved=variants['hybrid_interleaved_tail']
+        rrf_tail=variants['hybrid_rrf_tail']
         dense_eval=variants['dense']
         result.append({
             'id':case['id'],'question':query,
@@ -223,6 +231,25 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
                     set(hybrid['chunk_span_overlap_ids_at_20'])-
                     set(dense_tail['chunk_span_overlap_ids_at_20'])),
             },
+            'tail_strategy_vs_hybrid':{
+                mode: {
+                    'new_gold_files_at_20': sorted(
+                        set(evaluation['gold_files_at_20'])-
+                        set(hybrid['gold_files_at_20'])),
+                    'lost_gold_files_at_20': sorted(
+                        set(hybrid['gold_files_at_20'])-
+                        set(evaluation['gold_files_at_20'])),
+                    'new_chunk_overlap_ids_at_20': sorted(
+                        set(evaluation['chunk_span_overlap_ids_at_20'])-
+                        set(hybrid['chunk_span_overlap_ids_at_20'])),
+                    'lost_chunk_overlap_ids_at_20': sorted(
+                        set(hybrid['chunk_span_overlap_ids_at_20'])-
+                        set(evaluation['chunk_span_overlap_ids_at_20'])),
+                }
+                for mode,evaluation in (
+                    ('hybrid_interleaved_tail',interleaved),
+                    ('hybrid_rrf_tail',rrf_tail))
+            },
             'dense_to_hybrid':{
                 'new_gold_files_at_8':sorted(
                     set(hybrid['gold_files_at_8']) -
@@ -281,6 +308,7 @@ def compare(run_id,suite,db,embedder,case_ids=(),intelligence_index=None):
                       'symbol_gate_only_changes_exact_symbol_view':True,
                       'scoped_mode_uses_existing_hybrid_ranking':True,
                       'dense_tail_preserves_hybrid_top8':True,
+                      'all_tail_strategies_preserve_hybrid_top8':True,
                       'frozen_source_commit':run.REPOS[suite][1]},
             'note':'Gold-blind ranking; chunk overlap is a retrieval bound, NOT '
                    'observed evidence recall, citation validity or answer correctness.'}
