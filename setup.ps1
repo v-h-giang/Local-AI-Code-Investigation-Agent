@@ -3,6 +3,7 @@
 [CmdletBinding()]
 param(
     [switch]$PullModel,
+    [switch]$PullEmbeddingModel,
     [switch]$WithTreeSitter,
     [switch]$RunTests,
     [ValidateSet('Auto','GPU','CPU','Skip')]
@@ -171,6 +172,37 @@ try {
     # Configure before running child Python/test processes.
     Configure-OllamaEnvironment -Mode $OllamaMode
 
+    # Stable per-repository embedding directory, not an individual .sqlite file.
+    # The benchmark and semantic wrapper resolve the DB by the source repo name.
+    $embeddingDirectory = Join-Path $repoRoot 'benchmark\results'
+    New-Item -ItemType Directory -Force -Path $embeddingDirectory | Out-Null
+    # Repair the old tutorial's single-file setting after results/ was deleted.
+    # Preserve existing custom paths and valid existing files.
+    $configuredDB = [Environment]::GetEnvironmentVariable('LOCAL_CODE_AGENT_EMBEDDING_DB','Process')
+    if ([string]::IsNullOrWhiteSpace($configuredDB)) {
+        $configuredDB = [Environment]::GetEnvironmentVariable('LOCAL_CODE_AGENT_EMBEDDING_DB','User')
+    }
+    $oldTutorialFile = Join-Path $embeddingDirectory 'agent-framework.sqlite'
+    if (-not [string]::IsNullOrWhiteSpace($configuredDB) -and
+        $configuredDB -eq $oldTutorialFile -and
+        -not (Test-Path -LiteralPath $configuredDB)) {
+        Set-RecommendedEnv -Name 'LOCAL_CODE_AGENT_EMBEDDING_DB' -Value $embeddingDirectory
+        Write-Host '[Setup] Replaced missing tutorial DB file with stable embedding directory.'
+    }
+    else {
+        Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_EMBEDDING_DB' -Value $embeddingDirectory
+    }
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_SEMANTIC_MODE' -Value 'dense'
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_COMPRESSION_MODE' -Value 'structure_mmr'
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_PREFETCH' -Value '1'
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_SEMANTIC_MODEL' -Value 'qwen3-embedding:0.6b'
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS' -Value '1024'
+    # Experimental features are opt-in to preserve the measured baseline.
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_CONTEXT_COMPACTION' -Value '0'
+    Set-DefaultEnv -Name 'LOCAL_CODE_AGENT_CLAIM_AUDIT' -Value '0'
+    Write-Host '[Setup] Semantic indexes are recreated from source when missing.'
+    Write-Host '[Setup] Automatic embedding rebuild requires local Ollama and qwen3-embedding:0.6b.'
+
     if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
         throw 'Python launcher (py.exe) not found. Install Python 3.11+ for Windows and enable the Python launcher.'
     }
@@ -269,6 +301,17 @@ try {
             throw 'Ollama model download failed. Check the Ollama service and network.'
         }
     }
+    if ($PullEmbeddingModel) {
+        if (-not $ollamaCommand) {
+            throw 'Ollama is not installed or not on PATH. Install Ollama for Windows first.'
+        }
+        $embeddingTag = [Environment]::GetEnvironmentVariable('LOCAL_CODE_AGENT_SEMANTIC_MODEL','Process')
+        Write-Host "[Setup] Downloading embedding model $embeddingTag (explicitly requested) ..."
+        & ollama pull $embeddingTag
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Embedding model download failed. Check Ollama, network and the model tag.'
+        }
+    }
     elseif (-not $ollamaCommand) {
         Write-Warning 'Ollama was not found. Static analysis works without it; AI workflows need a running Ollama service and qwen3:8b.'
     }
@@ -281,9 +324,12 @@ try {
     Write-Host '  .\.venv\Scripts\python.exe agent.py --project ".\sample_project" architecture --out ".\output\sample-architecture"'
     Write-Host '  .\.venv\Scripts\python.exe -m unittest discover -s tests -v'
     Write-Host '  .\.venv\Scripts\python.exe benchmark\run.py --preflight'
+    Write-Host '  .\.venv\Scripts\python.exe benchmark\run.py --suite repocontextbench --agent semantic_agent.py --model nemotron-3.5-bolt:e4b --run-id dense_structure_mmr_01 --max-steps 4'
+    Write-Host '  ollama pull qwen3-embedding:0.6b   # required once for automatic embedding recovery'
     Write-Host 'Optional activation: .\.venv\Scripts\Activate.ps1'
     Write-Host 'Backend override examples: .\setup.ps1 -OllamaMode CPU | .\setup.ps1 -OllamaMode GPU'
     Write-Host 'Restart Ollama after changing backend. ollama ps verifies actual CPU/GPU use.'
+    Write-Host 'To install the local embedding model once: .\setup.ps1 -PullEmbeddingModel'
 }
 finally {
     Pop-Location

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -165,6 +166,63 @@ def ensure_intelligence_index(suite, project, agent, run_dir, timeout=1800):
     return index
 
 
+def ensure_semantic_embedding_index(project, intelligence_index, args, run_dir):
+    """Rebuild a missing per-repository Dense index before launching a case.
+
+    Existing embeddings are reused and never overwritten. Non-semantic agent
+    runs do not require Ollama embeddings. No benchmark gold data is consulted.
+    """
+    agent_name=Path(args.agent).name.lower()
+    if agent_name!='semantic_agent.py' or args.mode=='non-ai':
+        return None
+    configured=os.environ.get('LOCAL_CODE_AGENT_EMBEDDING_DB')
+    if configured:
+        base=Path(configured).expanduser().resolve()
+        if base.suffix.lower()=='.sqlite':
+            destination=base
+            expected=project.name+'.sqlite'
+            if destination.name!=expected:
+                raise RuntimeError('Semantic index path must match this benchmark repository: '
+                                   +expected+'; got '+str(destination)
+                                   +'. Set LOCAL_CODE_AGENT_EMBEDDING_DB to a DIRECTORY.')
+        else:
+            destination=base/(project.name+'.sqlite')
+    else:
+        destination=RESULTS/(project.name+'.sqlite')
+        os.environ['LOCAL_CODE_AGENT_EMBEDDING_DB']=str(RESULTS.resolve())
+    if destination.is_file():
+        try:
+            import sqlite3
+            with closing(sqlite3.connect(destination.as_uri()+'?mode=ro',
+                                         uri=True,timeout=2)) as db:
+                metadata=dict(db.execute('SELECT key,value FROM meta'))
+                db.execute('SELECT 1 FROM chunks LIMIT 1').fetchone()
+            if metadata.get('root')!=str(project.resolve()):
+                raise RuntimeError('Dense embedding DB belongs to a different project: '
+                                   +str(destination)+'. Move/rename it and rebuild.')
+            return destination
+        except sqlite3.DatabaseError as exc:
+            raise RuntimeError('Dense embedding SQLite is corrupt: '+str(destination)
+                               +'. Preserve the file for inspection, then rename '
+                               'it and rerun benchmark.') from exc
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    command=[sys.executable,str(ROOT/'semantic_retrieval.py'),'index',
+             '--project',str(project),'--intelligence-index',str(intelligence_index),
+             '--db',str(destination),
+             '--model',os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL','qwen3-embedding:0.6b'),
+             '--dimensions',os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024'),
+             '--host',args.host,'--batch-size','8']
+    print('[Benchmark] Missing Dense embedding index. Rebuilding: '+str(destination),flush=True)
+    print('[Benchmark] Recovery command: '+subprocess.list2cmdline(command),flush=True)
+    # Stream progress: rebuilding may take much longer than an individual case.
+    completed=subprocess.run(command,cwd=ROOT,env=child_environment())
+    if completed.returncode or not destination.is_file():
+        raise RuntimeError('Dense index rebuilding failed. Verify Ollama is running, '
+                           'model qwen3-embedding:0.6b is installed, and disk has '
+                           'enough free space. Retry: '+subprocess.list2cmdline(command))
+    return destination
+
+
 def install_case_index(index, case_folder):
     """Private case index; avoids cross-case SQLite writes and shared output state."""
     destination = case_folder / 'middle-files' / 'code_intelligence.sqlite'
@@ -172,6 +230,17 @@ def install_case_index(index, case_folder):
     if not destination.is_file():
         shutil.copy2(index, destination)
     return destination
+
+
+def cleanup_case_index(case_folder):
+    """Remove only the per-case COPY of the intelligence index.
+
+    The shared _prepared_indexes index and separate embedding DB are never
+    removed. Call only after run_case wrote its machine/runner records.
+    """
+    destination = case_folder / 'middle-files' / 'code_intelligence.sqlite'
+    if destination.is_file():
+        destination.unlink()
 
 
 def valid_ref(project, ref):
@@ -498,6 +567,9 @@ def main(argv=None):
     p.add_argument('--llm-timeout', type=int, default=240,
                    help='HTTP timeout for EACH Ollama /api/chat request (seconds; agent default 240)')
     p.add_argument('--run-id', default='baseline')
+    p.add_argument('--keep-case-index', action='store_true',
+                   help='Keep a private SQLite copy for each case (uses much more disk); '
+                        'default deletes per-case copies after cases finish')
     p.add_argument('--resume', action='store_true')
     p.add_argument('--retry-failed', action='store_true',
                    help='With --resume, rerun only failed cases lacking recoverable machine JSON')
@@ -550,10 +622,34 @@ def main(argv=None):
     run_dir.mkdir(parents=True, exist_ok=True)
     configuration = {'suite': args.suite, 'mode': args.mode, 'model': args.model, 'host': args.host,
                      'repository_commits': {suite: REPOS[suite][1] for suite in projects}}
+    # Persist retrieval/compression settings so runs cannot silently mix modes.
+    # Historical run configs lack this section: allow resuming their already
+    # recorded cases, but do not misrepresent them as newly audited configs.
+    if agent.name.lower()=='semantic_agent.py':
+        configuration['semantic_settings'] = {
+            'retrieval_mode':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODE','hybrid'),
+            'compression_mode':os.environ.get('LOCAL_CODE_AGENT_COMPRESSION_MODE','structure_mmr'),
+            'prefetch':os.environ.get('LOCAL_CODE_AGENT_PREFETCH','1'),
+            'embedding_model':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_MODEL','qwen3-embedding:0.6b'),
+            'embedding_dimensions':os.environ.get('LOCAL_CODE_AGENT_SEMANTIC_DIMENSIONS','1024'),
+            'context_compaction':os.environ.get('LOCAL_CODE_AGENT_CONTEXT_COMPACTION','0'),
+            'claim_audit':os.environ.get('LOCAL_CODE_AGENT_CLAIM_AUDIT','0')}
     cfgfile = run_dir / 'run_config.json'
     if cfgfile.is_file():
-        if json.loads(cfgfile.read_text(encoding='utf-8')) != configuration:
-            p.error('Cannot resume a run with changed model, suite, mode, or commit')
+        previous_config=json.loads(cfgfile.read_text(encoding='utf-8'))
+        if ('semantic_settings' not in previous_config
+                and 'semantic_settings' in configuration):
+            # Older semantic runs: no config fingerprint was recorded.
+            # Keep them resumable, but print the uncertainty explicitly.
+            basic=dict(configuration)
+            basic.pop('semantic_settings',None)
+            if previous_config!=basic:
+                p.error('Cannot resume with changed run configuration')
+            print('[Benchmark] WARNING: existing run lacks a recorded semantic '
+                  'configuration. Confirm settings match original run.',flush=True)
+        elif previous_config!=configuration:
+            p.error('Cannot resume a run with changed model, retrieval, '
+                    'compression, prefetch or repository commit')
     else:
         cfgfile.write_text(json.dumps(configuration, indent=2), encoding='utf-8')
     records = {}
@@ -577,8 +673,13 @@ def main(argv=None):
                     'enable --allow-unsupported only for a diagnostic run.')
         suite_index = ensure_intelligence_index(case['suite'], projects[case['suite']],
                                                 agent, run_dir, timeout=args.timeout)
+        ensure_semantic_embedding_index(projects[case['suite']],suite_index,args,run_dir)
         install_case_index(suite_index, run_dir / case['id'])
         result = run_case(case, projects[case['suite']], agent, run_dir, args)
+        # run_case persists runner_record.json, stdout and stderr before return.
+        # Deleting the private copy does not affect frozen source or indexes.
+        if not args.keep_case_index:
+            cleanup_case_index(run_dir / case['id'])
         records[case['id']] = result
         save_report(run_dir, list(records.values()), args, len(cases), cases=cases)
         detail = result.get('error') or result.get('cli_warning') or ''
